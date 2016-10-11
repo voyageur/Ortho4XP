@@ -1,0 +1,14 @@
+.*.swp
+
+*.pyc
+*.pyo
+
+Elevation_data/*
+Masks/*
+Orthophotos/*
+OSM_data/*
+Previews/*.jpg
+Tiles/*
+Utils/Triangle4XP
+tmp/*
+last_map_position.txt
