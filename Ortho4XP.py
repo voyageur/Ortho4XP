@@ -6241,6 +6241,8 @@ if __name__ == '__main__':
         ortho_list=[]
         zone_list=[]
         exec(open(Ortho4XP_dir+dir_sep+'Ortho4XP.cfg').read())
+        if not os.path.exists(Ortho4XP_dir+dir_sep+'tmp'):
+            os.makedirs(Ortho4XP_dir+dir_sep+'tmp')
         if not os.path.exists(Ortho4XP_dir+dir_sep+'OSM_data'):
             os.makedirs(Ortho4XP_dir+dir_sep+'OSM_data')
         if not os.path.exists(Ortho4XP_dir+dir_sep+'Tiles'):
