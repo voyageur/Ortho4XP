@@ -132,7 +132,7 @@ shutd_msg_interval  = 15    # Shutdown message display interval
 cover_airports_with_highres = False # If True then a high(er) ZL square zone around each airport (found at Step 1) will be added as a custom zoomlevel list
 cover_extent = 1            # extent (km) of the highres zone added to the bbox containing the airport
 cover_zl = 18
-
+raster_resolution = 10000   # image size for the raster of the sniffed landclass terrain
 
 # Will be used as global variables
 download_to_do_list=[]
@@ -200,7 +200,7 @@ else:
 dico_edge_markers   = {'outer':'1','inner':'1','coastline':'2',\
                        'tileboundary':'3','orthogrid':'3',\
                        'airport':'4','runway':'5','patch':'6'}
-dico_tri_markers    = {'water':'1','sea':'2','sea_equiv':'3'}
+dico_tri_markers    = {'water':'1','sea':'2','sea_equiv':'3','altitude':'4'}
 
 try:
     exec(open(Ortho4XP_dir+dir_sep+'Carnet_d_adresses.py').read())
@@ -242,7 +242,103 @@ def usage(reason,do_i_quit=True):
     return
 ##############################################################################
 
+def build_landclass_poly_file(lat0,lon0,build_dir,file_to_sniff,dem_alternative=''):
 
+    t1=time.time()
+    if not os.path.exists(build_dir):
+        os.makedirs(build_dir)
+    strlat='{:+.0f}'.format(lat0).zfill(3)
+    strlon='{:+.0f}'.format(lon0).zfill(4)
+    poly_file =  build_dir+dir_sep+'Data'+strlat+strlon+'.poly'
+    airport_file  =  build_dir+dir_sep+'Data'+strlat+strlon+'.apt'
+    patch_dir =  Ortho4XP_dir+dir_sep+'Patches'+dir_sep+strlat+strlon
+    dico_nodes={}
+    dico_edges={}
+    dico_edges_water={}
+    water_seeds=[]
+    sea_seeds=[]
+    sea_equiv_seeds=[]
+    flat_airport_seeds=[]
+    flat_patch_seeds=[]
+    sloped_patch_seeds=[]
+    alt_seeds=[]
+
+    poly_list=[region[0] for region in zone_list]
+    bbox_list=[compute_bbox(poly) for poly in poly_list]
+    print("-> Analzing patch data ")
+    include_patch_data(lat0,lon0,patch_dir,dico_nodes,dico_edges,flat_patch_seeds,sloped_patch_seeds,alt_seeds,poly_list,bbox_list)
+    print(poly_list)
+    time.sleep(10)
+    print("-> Analyzing input landclass mesh ")
+    (tri_list,ter_list,tri_list_kept,hole_seeds)=read_and_split_dsf_mesh(lat0,lon0,build_dir,file_to_sniff,poly_list,bbox_list,dem_alternative)
+    #hole_seeds=[]
+    print("tri_list :",len(tri_list))
+    print("ter_list :",len(ter_list))
+
+    #for key in tri_list_kept:
+    #    try:
+    #        print(key)
+    #        print(len(tri_list_kept[key]))
+    #        print(' ')
+    #    except:
+    #        pass
+    #print("-> Computing splitting edges and building raster landclass map ")
+    #tri_list=split_mesh_according_to_poly_list(lat0,lon0,triangles,poly_list,bbox_list)
+    print("-> Building poly file for Triangle4XP ")
+    ttest=time.time()
+    for tri,ter in zip(tri_list,ter_list):
+        node1=['{:.6f}'.format(tri[0][1]),'{:.6f}'.format(tri[0][0])]  # i.e. [lat,lon]
+        node2=['{:.6f}'.format(tri[1][1]),'{:.6f}'.format(tri[1][0])]  # i.e. [lat,lon]
+        node3=['{:.6f}'.format(tri[2][1]),'{:.6f}'.format(tri[2][0])]  # i.e. [lat,lon]
+        keep_node(node1,lat0,lon0,dico_nodes,tri[0][2])
+        keep_node(node2,lat0,lon0,dico_nodes,tri[1][2])
+        keep_node(node3,lat0,lon0,dico_nodes,tri[2][2])
+        keep_edge_unique(node1,node2,'inner',dico_edges)
+        keep_edge_unique(node2,node3,'inner',dico_edges)
+        keep_edge_unique(node3,node1,'inner',dico_edges)
+        if ter==0: # water
+            keep_edge(node1,node2,'inner',dico_edges_water)
+            keep_edge(node2,node3,'inner',dico_edges_water)
+            keep_edge(node3,node1,'inner',dico_edges_water)
+        #if tri[3]==0: # terrain_Water
+        #    tri_bary=[(tri[0][0]+tri[1][0]+tri[2][0])/3,(tri[0][1]+tri[1][1]+tri[2][1])/3]
+        #    water_seeds.append(tri_bary)
+    for edge in dico_edges_water:
+        node0=edge.split('|')[0].split('_')
+        node1=edge.split('|')[1].split('_')
+        keep_edge(node0,node1,'inner',dico_edges)
+    print("time to keep edges : ",time.time()-ttest)
+
+    #if zone_list != []:
+    #    print("-> Adding of edges related to the orthophoto grid and computation of\n"
+    #          "     their intersections with OSM edges,")
+    #    dico_edges=cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges)
+    print("     Removal of obsolete edges,")
+    dico_edges_tmp={}
+    for edge in dico_edges:
+        [initpt,endpt]=edge.split('|')
+        if initpt != endpt:
+            dico_edges_tmp[edge]=dico_edges[edge]
+        else:
+            print("one removed edge : "+str(initpt))
+    dico_edges=dico_edges_tmp
+    print("     Removal of obsolete nodes,")
+    final_nodes={}
+    for edge in dico_edges:
+        #print(edge)
+        [initpt,endpt]=edge.split('|')
+        final_nodes[initpt]=dico_nodes[initpt]
+        final_nodes[endpt]=dico_nodes[endpt]
+    dico_nodes=final_nodes
+    print("-> Transcription of the data to the file "+poly_file)
+    write_poly_file(poly_file,airport_file,lat0,lon0,dico_nodes,dico_edges, water_seeds,sea_seeds,sea_equiv_seeds,\
+                    flat_airport_seeds,flat_patch_seeds,sloped_patch_seeds,alt_seeds,hole_seeds)
+
+    print('\nCompleted in '+str('{:.2f}'.format(time.time()-t1))+\
+                'sec.')
+    print('_____________________________________________________________'+\
+            '____________________________________')
+    return
 
 ##############################################################################
 # Construction du fichier .poly décrivant toutes les données vectorielles
@@ -269,17 +365,16 @@ def build_poly_file(lat0,lon0,option,build_dir,airport_website=default_website):
     flat_airport_seeds=[]
     flat_patch_seeds=[]
     sloped_patch_seeds=[]
+    alt_seeds=[]
     init_nodes=0
     tags=[]
     if option==2:  # Orthophoto only for inland water
-        orthogrid=True
         print("-> Downloading airport and water/ground boundary data on Openstreetmap")
         tags.append('way["aeroway"="aerodrome"]')
         tags.append('rel["aeroway"="aerodrome"]')
         tags.append('way["aeroway"="heliport"]')
         tags.append('way["natural"="coastline"]')
     else:  # Mixed
-        orthogrid=True
         print("-> Downloading airport and water/ground boundary data from Openstreetmap :")
         tags.append('way["aeroway"="aerodrome"]')
         tags.append('rel["aeroway"="aerodrome"]')
@@ -335,7 +430,7 @@ def build_poly_file(lat0,lon0,option,build_dir,airport_website=default_website):
             sloped_airports_list=[]
             if os.path.exists(patch_dir):
                 for pfilename in os.listdir(patch_dir):
-                    if pfilename[-10:] == '.patch.osm':
+                    if (pfilename[-10:] == '.patch.osm') or os.path.isdir(patch_dir+dir_sep+pfilename):
                         sloped_airports_list.append(pfilename[:4])
             for wayid in dicosmw:
                 way=dicosmw[wayid]
@@ -505,10 +600,8 @@ def build_poly_file(lat0,lon0,option,build_dir,airport_website=default_website):
     dico_edges_tmp={}
     for edge in dico_edges:
         [initpt,endpt]=edge.split('|')
-        xi=xcoord(initpt,dico_nodes)
-        yi=ycoord(initpt,dico_nodes)
-        xf= xcoord(endpt,dico_nodes)
-        yf= ycoord(endpt,dico_nodes)
+        [xi,yi]=xycoords(initpt,lat0,lon0)
+        [xf,yf]=xycoords(endpt,lat0,lon0)
         #length=sqrt((xi-xf)*(xi-xf)+(yi-yf)*(yi-yf))
         length=abs(xi-xf)+abs(yi-yf)
         pieces=ceil(length*1000)
@@ -532,127 +625,12 @@ def build_poly_file(lat0,lon0,option,build_dir,airport_website=default_website):
                         dico_edges_tmp)
     dico_edges=dico_edges_tmp
     print("-> Adding patch data for the mesh, ")
-    if os.path.exists(patch_dir):
-        patchlist=os.listdir(patch_dir)
-    else:
-        patchlist=[]
-    for pfilename in patchlist:
-        if pfilename[-10:] != '.patch.osm':
-            continue
-        pfile=open(patch_dir+dir_sep+pfilename,"r")
-        secondline=pfile.readline()
-        secondline=pfile.readline()
-        print("     "+pfilename)
-        finished_with_nodes=False
-        started_with_nodes=False
-        nodes_codes={}
-        while not finished_with_nodes==True:
-            items=pfile.readline().split()
-            if '<node' in items:
-                started_with_nodes=True
-                for item in items:
-                    if 'id=' in item:
-                        id=item[3:]
-                    elif 'lat=' in item:
-                        slat=item[5:-1]
-                    elif 'lon=' in item:
-                        slon=item[5:-1]
-                dico_nodes[slat+'_'+slon]=[float(slon)-lon0,float(slat)-lat0]
-                nodes_codes[id]=slat+'_'+slon
-            elif started_with_nodes==True:
-                finished_with_nodes=True
-        finished_with_ways=False
-        while finished_with_ways != True:
-            newwaycodes=[]
-            finished_with_newway=False
-            flat_patch=False
-            sloped_patch=False
-            way_profile='atanh'
-            way_steepness='3.5'
-            way_cell_size='5'
-            while finished_with_newway!=True:
-                line=pfile.readline().split()
-                if '<nd' in line:
-                    newnodeid=line[1][4:]
-                    newwaycodes.append(nodes_codes[newnodeid])
-                else:
-                    if "k='altitude'" in line:
-                        flat_patch=True
-                        if line[2][3:-1]=='mean':
-                            way_altitude='mean'
-                        else:
-                            way_altitude=float(line[2][3:-1])
-                    elif "k='altitude_high'" in line:
-                        sloped_patch=True
-                        way_altitude_high=float(line[2][3:-1])
-                    elif "k='altitude_low'" in line:
-                        way_altitude_low=float(line[2][3:-1])
-                    elif "k='profile'" in line:
-                        way_profile=line[2][3:-1]
-                    elif "k='steepness'" in line:
-                        way_steepness=line[2][3:-1]
-                    elif "k='cell_size'" in line:
-                        way_cell_size=line[2][3:-1]
-                    elif '</way>' in line:
-                        finished_with_newway=True
-                    else:
-                        pass
-            if flat_patch==True:
-                seed=keep_patch(newwaycodes,dico_nodes,dico_edges)
-                flat_patch_seeds.append([seed,way_altitude,newwaycodes])
-            elif sloped_patch==True:
-                [seed,xi,yi,xf,yf]=keep_sloped_patch(newwaycodes,\
-                        float(way_cell_size)/100000,dico_nodes,\
-                        dico_edges,lat0,lon0)
-                sloped_patch_seeds.append([seed,xi,yi,xf,yf,\
-                        way_altitude_high,way_altitude_low,\
-                        way_profile,way_steepness,way_cell_size])
-            else:
-                seed=keep_patch(newwaycodes,dico_nodes,dico_edges)
-            line=pfile.readline().split()
-            if '</osm>' in line:
-                finished_with_ways=True
-        # Now we need to sanitize edges because the cuts which we made
-        # on the short sides of sloped patches may be encroached with
-        # sides of flat patches.
-        pfile.seek(0)
-        finished_with_nodes=False
-        started_with_nodes=False
-        while not finished_with_nodes==True:
-            items=pfile.readline().split()
-            if '<node' in items:
-                started_with_nodes=True
-            elif started_with_nodes==True:
-                finished_with_nodes=True
-        finished_with_ways=False
-        while finished_with_ways != True:
-            newwaycodes=[]
-            finished_with_newway=False
-            sloped_patch=False
-            while finished_with_newway!=True:
-                line=pfile.readline().split()
-                if '<nd' in line:
-                    newnodeid=line[1][4:]
-                    newwaycodes.append(nodes_codes[newnodeid])
-                else:
-                    if "k='altitude_high'" in line:
-                        sloped_patch=True
-                    elif '</way>' in line:
-                        finished_with_newway=True
-                    else:
-                        pass
-            if sloped_patch==True:
-                dico_edges.pop(newwaycodes[0]+'|'+newwaycodes[3],None)
-                dico_edges.pop(newwaycodes[3]+'|'+newwaycodes[0],None)
-                dico_edges.pop(newwaycodes[1]+'|'+newwaycodes[2],None)
-                dico_edges.pop(newwaycodes[2]+'|'+newwaycodes[1],None)
-            line=pfile.readline().split()
-            if '</osm>' in line:
-                finished_with_ways=True
-        pfile.close()
+
+    include_patch_data(lat0,lon0,patch_dir,dico_nodes,dico_edges,flat_patch_seeds,sloped_patch_seeds,alt_seeds)
+
     print("-> Adding of edges related to the orthophoto grid and computation of\n"
           "     their intersections with OSM edges,")
-    dico_edges=cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid)
+    dico_edges=cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges)
     print("     Removal of obsolete edges,")
     dico_edges_tmp={}
     for edge in dico_edges:
@@ -671,100 +649,9 @@ def build_poly_file(lat0,lon0,option,build_dir,airport_website=default_website):
         final_nodes[endpt]=dico_nodes[endpt]
     dico_nodes=final_nodes
     print("-> Transcription of the updated data to the file "+poly_file)
-    total_nodes=len(dico_nodes)
-    f=open(poly_file,'w')
-    f.write(str(total_nodes)+' 2 0 0\n')
-    dico_node_pos={}
-    idx=1
-    for key in dico_nodes:
-        dico_node_pos[key]=idx
-        f.write(str(idx)+' '+str(dico_nodes[key][0])+' '+\
-          str(dico_nodes[key][1])+'\n')
-        idx+=1
-    f.write('\n')
-    idx=1
-    total_edges=len(dico_edges)
-    f.write(str(total_edges)+' 1\n')
-    for edge in dico_edges:
-        [code1,code2]=edge.split('|')
-        idx1=dico_node_pos[code1]
-        idx2=dico_node_pos[code2]
-        f.write(str(idx)+' '+str(idx1)+' '+str(idx2)+' '+\
-                dico_edge_markers[dico_edges[edge]]+'\n')
-        idx+=1
-    f.write('\n0\n')
-    total_seeds=len(water_seeds)+len(sea_seeds)+len(sea_equiv_seeds)+\
-                len(flat_airport_seeds)+len(flat_patch_seeds)+\
-                len(sloped_patch_seeds)
-    if total_seeds==0:
-        if sea_texture_params==[]:
-            water_seeds.append([1000,1000])
-        else:
-            sea_seeds.append([lon0+0.5,lat0+0.5])
-        total_seeds=1
-    f.write('\n'+str(total_seeds)+' 1\n')
-    idx=1
-    for seed in water_seeds:
-        f.write(str(idx)+' '+str(seed[0]-lon0)+' '+str(seed[1]-lat0)+' '+\
-          dico_tri_markers['water']+'\n')
-        idx+=1
-    for seed in sea_seeds:
-        f.write(str(idx)+' '+str(seed[0]-lon0)+' '+str(seed[1]-lat0)+' '+\
-          dico_tri_markers['sea']+'\n')
-        idx+=1
-    for seed in sea_equiv_seeds:
-        f.write(str(idx)+' '+str(seed[0]-lon0)+' '+str(seed[1]-lat0)+' '+\
-          dico_tri_markers['sea_equiv']+'\n')
-        idx+=1
-    apt_idx=100
-    for seed in flat_airport_seeds:
-        f.write(str(idx)+' '+str(seed[1][0]-lon0)+' '+\
-          str(seed[1][1]-lat0)+' '+str(apt_idx)+'\n')
-        apt_idx+=1
-        idx+=1
-    fp_idx=1000
-    for seed in flat_patch_seeds:
-        f.write(str(idx)+' '+str(seed[0][0])+' '+\
-          str(seed[0][1])+' '+str(fp_idx)+'\n')
-        fp_idx+=1
-        idx+=1
-    sp_idx=10000
-    for seed in sloped_patch_seeds:
-        f.write(str(idx)+' '+str(seed[0][0])+' '+str(seed[0][1])+' '+\
-                str(sp_idx)+'\n')
-        sp_idx+=1
-    print("   Remain " + str(len(dico_edges))+\
-          " edges in total.")
-    f.close()
-    f=open(airport_file,"w")
-    apt_idx =   100
-    fp_idx  =  1000
-    sp_idx  = 10000
-    for seed in flat_airport_seeds:
-        f.write("Airport "+str(apt_idx)+" : "+str(len(seed[0]))+\
-                " nodes.\n")
-        f.write("Elevation "+str(seed[2])+'\n')
-        for node in seed[0]:
-            f.write(str(float(node[0]))+" "+str(float(node[1]))+"\n")
-        f.write("\n")
-        apt_idx+=1
-    f.write('\n')
-    for seed in flat_patch_seeds:
-        f.write("Flat_patch "+str(fp_idx)+" : "+str(len(seed[2]))+"\n")
-        f.write("Elevation "+str(seed[1])+'\n')
-        for node in seed[2]:
-            [slat,slon]=node.split('_')
-            f.write(slat+" "+slon+"\n")
-        f.write("\n")
-        fp_idx+=1
-    f.write('\n')
-    for seed in sloped_patch_seeds:
-        f.write("Sloped_patch "+str(sp_idx)+" : "+str(seed[1])+" "+\
-                str(seed[2])+" "+str(seed[3])+" "+str(seed[4])+" "+\
-                str(seed[5])+" "+str(seed[6])+" "+str(seed[7])+" "+\
-                str(seed[8])+" "+str(seed[9])+"\n")
-        sp_idx+=1
-    f.close()
+    write_poly_file(poly_file,airport_file,lat0,lon0,dico_nodes,dico_edges, water_seeds,sea_seeds,sea_equiv_seeds,\
+                    flat_airport_seeds,flat_patch_seeds,sloped_patch_seeds,alt_seeds)
+    # adding airports high zl zone to zone_list if needed
     try:
         if cover_airports_with_highres==True and (zone_list==[] or (zone_list[-1][0][0]==zone_list[-1][0][2]==zone_list[-1][0][8])):  # i.e. airports claimed but not already in zone_list (since write_cfg puts them there)
             with open(build_dir+dir_sep+"Data"+strlat+strlon+'.apt') as fapt:
@@ -804,6 +691,121 @@ def build_poly_file(lat0,lon0,option,build_dir,airport_website=default_website):
 
     return
 #############################################################################
+
+#############################################################################
+def write_poly_file(poly_file,airport_file,lat0,lon0,dico_nodes,dico_edges,\
+                    water_seeds,sea_seeds,sea_equiv_seeds,flat_airport_seeds,\
+                    flat_patch_seeds, sloped_patch_seeds,alt_seeds,hole_seeds=None):
+    total_nodes=len(dico_nodes)
+    f=open(poly_file,'w')
+    f.write(str(total_nodes)+' 2 1 0\n')
+    dico_node_pos={}
+    idx=1
+    for key in dico_nodes:
+        dico_node_pos[key]=idx
+        [x,y]=xycoords(key,lat0,lon0)
+        f.write(str(idx)+' '+str(x)+' '+\
+          str(y)+' '+str(dico_nodes[key])+'\n')
+        idx+=1
+    f.write('\n')
+    idx=1
+    total_edges=len(dico_edges)
+    f.write(str(total_edges)+' 1\n')
+    for edge in dico_edges:
+        [code1,code2]=edge.split('|')
+        idx1=dico_node_pos[code1]
+        idx2=dico_node_pos[code2]
+        f.write(str(idx)+' '+str(idx1)+' '+str(idx2)+' '+\
+                dico_edge_markers[dico_edges[edge]]+'\n')
+        idx+=1
+    if hole_seeds==None or len(hole_seeds)==0:
+        f.write('\n0\n')
+    else:
+        nbr_hole_seeds=len(hole_seeds)
+        f.write('\n'+str(nbr_hole_seeds)+'\n')
+        idx=1
+        for seed in hole_seeds:
+            f.write(str(idx)+' '+str(seed[1]-lon0)+' '+str(seed[0]-lat0)+'\n')
+            idx+=1
+    total_seeds=len(water_seeds)+len(sea_seeds)+len(sea_equiv_seeds)+\
+                len(flat_airport_seeds)+len(flat_patch_seeds)+\
+                len(sloped_patch_seeds)+len(alt_seeds)
+    if total_seeds==0:
+        if sea_texture_params==[]:
+            water_seeds.append([1000,1000])
+        else:
+            sea_seeds.append([lon0+0.5,lat0+0.5])
+        total_seeds=1
+    f.write('\n'+str(total_seeds)+' 1\n')
+    idx=1
+    for seed in water_seeds:
+        f.write(str(idx)+' '+str(seed[0]-lon0)+' '+str(seed[1]-lat0)+' '+\
+          dico_tri_markers['water']+'\n')
+        idx+=1
+    for seed in sea_seeds:
+        f.write(str(idx)+' '+str(seed[0]-lon0)+' '+str(seed[1]-lat0)+' '+\
+          dico_tri_markers['sea']+'\n')
+        idx+=1
+    for seed in sea_equiv_seeds:
+        f.write(str(idx)+' '+str(seed[0]-lon0)+' '+str(seed[1]-lat0)+' '+\
+          dico_tri_markers['sea_equiv']+'\n')
+        idx+=1
+    for seed in alt_seeds:
+        f.write(str(idx)+' '+str(seed[0]-lon0)+' '+str(seed[1]-lat0)+' '+\
+          dico_tri_markers['altitude']+'\n')
+        idx+=1
+    apt_idx=100
+    for seed in flat_airport_seeds:
+        f.write(str(idx)+' '+str(seed[1][0]-lon0)+' '+\
+          str(seed[1][1]-lat0)+' '+str(apt_idx)+'\n')
+        apt_idx+=1
+        idx+=1
+    fp_idx=1000
+    for seed in flat_patch_seeds:
+        f.write(str(idx)+' '+str(seed[0][0])+' '+\
+          str(seed[0][1])+' '+str(fp_idx)+'\n')
+        fp_idx+=1
+        idx+=1
+    sp_idx=10000
+    for seed in sloped_patch_seeds:
+        f.write(str(idx)+' '+str(seed[0][0])+' '+str(seed[0][1])+' '+\
+                str(sp_idx)+'\n')
+        sp_idx+=1
+        idx+=1
+    print("   Remain " + str(len(dico_edges))+\
+          " edges in total.")
+    f.close()
+    f=open(airport_file,"w")
+    apt_idx =   100
+    fp_idx  =  1000
+    sp_idx  = 10000
+    for seed in flat_airport_seeds:
+        f.write("Airport "+str(apt_idx)+" : "+str(len(seed[0]))+\
+                " nodes.\n")
+        f.write("Elevation "+str(seed[2])+'\n')
+        for node in seed[0]:
+            f.write(str(float(node[0]))+" "+str(float(node[1]))+"\n")
+        f.write("\n")
+        apt_idx+=1
+    f.write('\n')
+    for seed in flat_patch_seeds:
+        f.write("Flat_patch "+str(fp_idx)+" : "+str(len(seed[2]))+"\n")
+        f.write("Elevation "+str(seed[1])+'\n')
+        for node in seed[2]:
+            [slat,slon]=node.split('_')
+            f.write(slat+" "+slon+"\n")
+        f.write("\n")
+        fp_idx+=1
+    f.write('\n')
+    for seed in sloped_patch_seeds:
+        f.write("Sloped_patch "+str(sp_idx)+" : "+str(seed[1])+" "+\
+                str(seed[2])+" "+str(seed[3])+" "+str(seed[4])+" "+\
+                str(seed[5])+" "+str(seed[6])+" "+str(seed[7])+" "+\
+                str(seed[8])+" "+str(seed[9])+"\n")
+        sp_idx+=1
+    f.close()
+    return
+##############################################################################
 
 ##############################################################################
 def osmway_to_dicos(osm_filename):
@@ -1010,8 +1012,8 @@ def strcode(node):
 
 
 #############################################################################
-def keep_node(node,lat0,lon0,dico_nodes):
-   dico_nodes[strcode(node)]=[float(node[1])-lon0,float(node[0])-lat0]
+def keep_node(node,lat0,lon0,dico_nodes,attribute=-32768):
+   dico_nodes[strcode(node)]=attribute
    return
 #############################################################################
 
@@ -1026,19 +1028,33 @@ def keep_edge(node0,node,marker,dico_edges):
 #############################################################################
 
 #############################################################################
-def keep_way(way,lat0,lon0,sign,marker,dico_nodes,dico_edges):
+def keep_edge_unique(node0,node,marker,dico_edges):
+   if strcode(node0) == strcode(node):
+       return
+   if strcode(node0)+'|'+strcode(node) in dico_edges:
+       dico_edges.pop(strcode(node0)+'|'+strcode(node),None)
+       return
+   if strcode(node)+'|'+strcode(node0) in dico_edges:
+       dico_edges.pop(strcode(node)+'|'+strcode(node0),None)
+       return
+   dico_edges[strcode(node0)+'|'+strcode(node)]=marker
+   return
+#############################################################################
+
+#############################################################################
+def keep_way(way,lat0,lon0,sign,marker,dico_nodes,dico_edges,attribute=-32768):
    if sign==1:
        node0=way[0]
-       keep_node(node0,lat0,lon0,dico_nodes)
+       keep_node(node0,lat0,lon0,dico_nodes,attribute)
        for node in way[1:]:
-           keep_node(node,lat0,lon0,dico_nodes)
+           keep_node(node,lat0,lon0,dico_nodes,attribute)
            keep_edge(node0,node,marker,dico_edges)
            node0=node
    elif sign==-1:
        node0=way[-1]
-       keep_node(node0,lat0,lon0,dico_nodes)
+       keep_node(node0,lat0,lon0,dico_nodes,attribute)
        for node in way[-1:-len(way)-1:-1]:
-           keep_node(node,lat0,lon0,dico_nodes)
+           keep_node(node,lat0,lon0,dico_nodes,attribute)
            keep_edge(node0,node,marker,dico_edges)
            node0=node
    return
@@ -1050,19 +1066,15 @@ def strxy(x,y,lat0,lon0):
 #############################################################################
 
 #############################################################################
-def keep_node_xy(x,y,lat0,lon0,dico_nodes):
-   dico_nodes[strxy(x,y,lat0,lon0)]=[x,y]
+def keep_node_xy(x,y,lat0,lon0,dico_nodes,attribute=-32768):
+   dico_nodes[strxy(x,y,lat0,lon0)]=attribute
    return
 #############################################################################
 
 #############################################################################
-def xcoord(strcode,dico_nodes):
-    return float(dico_nodes[strcode][0])
-#############################################################################
-
-#############################################################################
-def ycoord(strcode,dico_nodes):
-    return float(dico_nodes[strcode][1])
+def xycoords(strcode,lat0,lon0):
+    [slat,slon]=strcode.split('_')
+    return [float(slon)-lon0,float(slat)-lat0]
 #############################################################################
 
 #############################################################################
@@ -1071,15 +1083,181 @@ def keep_edge_str_tmp(strcode1,strcode2,marker,dico_edges_tmp):
    return
 #############################################################################
 
+#############################################################################
+def include_patch_data(lat0,lon0,patch_dir,dico_nodes,dico_edges,flat_patch_seeds,sloped_patch_seeds,alt_seeds,poly_list=None,bbox_list=None):
+    if not os.path.exists(patch_dir): return
+    for pfilename in os.listdir(patch_dir):
+        if pfilename[-10:]!='.patch.osm':
+            continue
+        print("     "+pfilename)
+        pfile=open(patch_dir+dir_sep+pfilename,"r")
+        firstline=pfile.readline()
+        secondline=pfile.readline()
+        minlat=90
+        maxlat=-90
+        minlon=180
+        maxlon=-180
+        finished_with_nodes=False
+        started_with_nodes=False
+        nodes_codes={}
+        while not finished_with_nodes==True:
+            items=pfile.readline().split()
+            if '<node' in items:
+                started_with_nodes=True
+                for item in items:
+                    if 'id=' in item:
+                        id=item[3:]
+                    elif 'lat=' in item:
+                        slat=item[5:-1]
+                    elif 'lon=' in item:
+                        slon=item[5:-1]
+                dico_nodes[slat+'_'+slon]=-32768 #[float(slon)-lon0,float(slat)-lat0]
+                nodes_codes[id]=slat+'_'+slon
+            elif started_with_nodes==True:
+                finished_with_nodes=True
+        finished_with_ways=False
+        while finished_with_ways != True:
+            newwaycodes=[]
+            finished_with_newway=False
+            flat_patch=False
+            sloped_patch=False
+            way_profile='atanh'
+            way_steepness='3.5'
+            way_cell_size='5'
+            while finished_with_newway!=True:
+                line=pfile.readline().split()
+                if '<nd' in line:
+                    newnodeid=line[1][4:]
+                    newwaycodes.append(nodes_codes[newnodeid])
+                else:
+                    if "k='altitude'" in line:
+                        flat_patch=True
+                        if line[2][3:-1]=='mean':
+                            way_altitude='mean'
+                        else:
+                            way_altitude=float(line[2][3:-1])
+                    elif "k='altitude_high'" in line:
+                        sloped_patch=True
+                        way_altitude_high=float(line[2][3:-1])
+                    elif "k='altitude_low'" in line:
+                        way_altitude_low=float(line[2][3:-1])
+                    elif "k='profile'" in line:
+                        way_profile=line[2][3:-1]
+                    elif "k='steepness'" in line:
+                        way_steepness=line[2][3:-1]
+                    elif "k='cell_size'" in line:
+                        way_cell_size=line[2][3:-1]
+                    elif '</way>' in line:
+                        finished_with_newway=True
+                    else:
+                        pass
+            if flat_patch==True:
+                seed=keep_patch(newwaycodes,lat0,lon0,dico_edges)
+                flat_patch_seeds.append([seed,way_altitude,newwaycodes])
+            elif sloped_patch==True:
+                [seed,xi,yi,xf,yf]=keep_sloped_patch(newwaycodes,\
+                        float(way_cell_size)/100000,dico_nodes,\
+                        dico_edges,lat0,lon0)
+                sloped_patch_seeds.append([seed,xi,yi,xf,yf,\
+                        way_altitude_high,way_altitude_low,\
+                        way_profile,way_steepness,way_cell_size])
+            else:
+                seed=keep_patch(newwaycodes,lat0,lon0,dico_edges)
+            if poly_list is not None:
+                way_poly=[]
+                for strnode in newwaycodes:
+                    [wplat,wplon]=[float(x) for x in strnode.split('_')]
+                    way_poly+=[wplat,wplon]
+                    minlat = wplat if wplat<minlat else minlat
+                    maxlat = wplat if wplat>maxlat else maxlat
+                    minlon = wplon if wplon<minlon else minlon
+                    maxlon = wplon if wplon>maxlon else maxlon
+                [wplat,wplon]=[float(x) for x in newwaycodes[0].split('_')]
+                way_poly+=[wplat,wplon]
+                poly_list.append(way_poly)
+            line=pfile.readline().split()
+            if '</osm>' in line:
+                finished_with_ways=True
+        # Now we need to sanitize edges because the cuts which we made
+        # on the short sides of sloped patches may be encroached with
+        # sides of flat patches.
+        pfile.seek(0)
+        finished_with_nodes=False
+        started_with_nodes=False
+        while not finished_with_nodes==True:
+            items=pfile.readline().split()
+            if '<node' in items:
+                started_with_nodes=True
+            elif started_with_nodes==True:
+                finished_with_nodes=True
+        finished_with_ways=False
+        while finished_with_ways != True:
+            newwaycodes=[]
+            finished_with_newway=False
+            sloped_patch=False
+            while finished_with_newway!=True:
+                line=pfile.readline().split()
+                if '<nd' in line:
+                    newnodeid=line[1][4:]
+                    newwaycodes.append(nodes_codes[newnodeid])
+                else:
+                    if "k='altitude_high'" in line:
+                        sloped_patch=True
+                    elif '</way>' in line:
+                        finished_with_newway=True
+                    else:
+                        pass
+            if sloped_patch==True:
+                dico_edges.pop(newwaycodes[0]+'|'+newwaycodes[3],None)
+                dico_edges.pop(newwaycodes[3]+'|'+newwaycodes[0],None)
+                dico_edges.pop(newwaycodes[1]+'|'+newwaycodes[2],None)
+                dico_edges.pop(newwaycodes[2]+'|'+newwaycodes[1],None)
+            line=pfile.readline().split()
+            if '</osm>' in line:
+                finished_with_ways=True
+        pfile.close()
+        if poly_list is not None:
+            bbox_list.append([minlat-0.01,maxlat+0.01,minlon-0.01,maxlon+0.01])
+    for pdirname in os.listdir(patch_dir):
+        if not os.path.isdir(patch_dir+dir_sep+pdirname): continue
+        print("     "+pdirname)
+        bbox=[90,-90,180,-180]
+        for pfilename in os.listdir(patch_dir+dir_sep+pdirname):
+            pfilenamelong=patch_dir+dir_sep+pdirname+dir_sep+pfilename
+            pfile=open(pfilenamelong,"r")
+            firstline=pfile.readline()
+            if not 'ANCHOR' in firstline:
+                print("Objetc ",pfilename, " is missing and ANCHOR in first line, skipping")
+                continue
+            pfile.close()
+            try:
+                [lon_anchor,lat_anchor,alt_anchor,heading_anchor]=[float(x) for x in firstline.split()[1:]]
+            except:
+                try:
+                    [lon_anchor,lat_anchor,heading_anchor]=[float(x) for x in firstline.split()[1:]]
+                    alt_anchor=1858 # TODO !!!!!!!!!!!!!!!
+                except:
+                    print("Anchor wrongly encode for : ",pfilename," skipping that one.")
+                    continue
+            bbox_loc=keep_obj8(lat0,lon0,lat_anchor,lon_anchor,alt_anchor,heading_anchor,pfilenamelong,dico_nodes,dico_edges,alt_seeds)
+            bbox[0]=(bbox_loc[0]<bbox[0]) and bbox_loc[0] or bbox[0]
+            bbox[1]=(bbox_loc[1]>bbox[1]) and bbox_loc[1] or bbox[1]
+            bbox[2]=(bbox_loc[2]<bbox[2]) and bbox_loc[2] or bbox[2]
+            bbox[3]=(bbox_loc[3]>bbox[3]) and bbox_loc[3] or bbox[3]
+        if (bbox!=[90,-90,180,-180]) and (poly_list is not None):
+            bbox_list.append([bbox[0]-0.01,bbox[1]+0.01,bbox[2]-0.01,bbox[3]+0.01])
+            poly_list.append([bbox[0],bbox[2],bbox[0],bbox[3],bbox[1],bbox[3],bbox[1],bbox[2],bbox[0],bbox[2]])
+    return
+#############################################################################
 
 #############################################################################
-def keep_patch(newwaycodes,dico_nodes,dico_edges):
+def keep_patch(newwaycodes,lat0,lon0,dico_edges):
     for i in range(0,len(newwaycodes)-1):
         dico_edges[newwaycodes[i]+'|'+newwaycodes[i+1]]='patch'
     eps=0.01
     newway=[]
     for node_code in newwaycodes:
-        newway+=dico_nodes[node_code]
+        newway+=xycoords(node_code,lat0,lon0)
     testpt1=[(newway[0]+newway[2])/2.0+eps*(newway[3]-newway[1]),\
              (newway[1]+newway[3])/2.0-eps*(newway[2]-newway[0])]
     testpt2=[(newway[0]+newway[2])/2.0-eps*(newway[3]-newway[1]),\
@@ -1096,7 +1274,7 @@ def keep_sloped_patch(waycodes,cell_size,dico_nodes,dico_edges,lat0,lon0):
     way=[]
     sdn={}
     for node_code in waycodes:
-        way+=dico_nodes[node_code]
+        way+=xycoords(node_code,lat0,lon0)
     approx_length=sqrt((way[0]-way[2])**2*cos(lat0*pi/180)**2+\
             (way[1]-way[3])**2)
     approx_width =sqrt((way[0]-way[6])**2*cos(lat0*pi/180)**2+\
@@ -1113,7 +1291,7 @@ def keep_sloped_patch(waycodes,cell_size,dico_nodes,dico_edges,lat0,lon0):
             nlon=xcoord+lon0
             if (nx!=0 or ny!=0) and (nx!=0 or ny!=Ny) and \
                     (nx!=Nx or ny!=0) and (nx!=Nx or ny!=Ny):
-                dico_nodes[str(nlat)+'_'+str(nlon)]=[xcoord,ycoord]
+                dico_nodes[str(nlat)+'_'+str(nlon)]=-32768 #[xcoord,ycoord]
                 sdn[(nx,ny)]=str(nlat)+'_'+str(nlon)
     sdn[(0,0)]=waycodes[0]
     sdn[(0,Ny)]=waycodes[1]
@@ -1151,7 +1329,78 @@ def keep_sloped_patch(waycodes,cell_size,dico_nodes,dico_edges,lat0,lon0):
 #############################################################################
 
 #############################################################################
-def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
+def keep_obj8(lat,lon,lat_anchor,lon_anchor,alt_anchor,heading_anchor,objfilename,dico_nodes,dico_edges,alt_seeds):
+    dico_idx_nodes={}
+    idx_node=0
+    dico_index={}
+    index=0
+    half_meridian=pi*6378137
+    latscale=180/half_meridian
+    lonscale=latscale/cos(lat_anchor*pi/180)
+    latmin=90
+    latmax=-90
+    lonmin=180
+    lonmax=-180
+    f=open(objfilename,'r')
+    for line in f.readlines():
+        if line[0:2]=='VT':
+            [x,y,z]=[float(s) for s in line.split()[1:4]]
+            X=x*cos(heading_anchor*pi/180)-z*sin(heading_anchor*pi/180)
+            Z=x*sin(heading_anchor*pi/180)+z*cos(heading_anchor*pi/180)
+            flat=lat_anchor-latscale*float(Z)
+            flon=lon_anchor+lonscale*float(X)
+            slat=str(flat)
+            slon=str(flon)
+            latmin= (latmin>flat) and flat or latmin
+            latmax= (latmax<flat) and flat or latmax
+            lonmin= (lonmin>flon) and flon or lonmin
+            lonmax= (lonmax<flon) and flon or lonmax
+            if slat+'_'+slon in dico_nodes:
+                if dico_nodes[slat+'_'+slon]>float(y)+alt_anchor:
+                   dico_nodes[slat+'_'+slon]=float(y)+alt_anchor
+            else:
+                   dico_nodes[slat+'_'+slon]=float(y)+alt_anchor
+            dico_idx_nodes[str(idx_node)]=slat+'_'+slon
+            idx_node+=1
+        elif line[0:3]=='IDX':
+            dico_index[index]=line.split()[1:]
+            index+=1
+        elif line[0:4]=='TRIS':
+            [offset,count]=line.split()[1:]
+            offset=int(offset)
+            count=int(count)
+            list=[]
+            count_tmp=0
+            try:
+                while count_tmp < count:
+                    list+=dico_index[offset]
+                    count_tmp+=len(dico_index[offset])
+                    offset+=1
+                for j in range(count//3):
+                    [a,b,c]=list[3*j:3*j+3]
+                    [lata,lona]=[float(x) for x in dico_idx_nodes[a].split('_')]
+                    [latb,lonb]=[float(x) for x in dico_idx_nodes[b].split('_')]
+                    [latc,lonc]=[float(x) for x in dico_idx_nodes[c].split('_')]
+                    if (abs(lata-latb)+abs(lona-lonb))*(abs(lata-latc)+abs(lona-lonc))*(abs(latc-latb)+abs(lonc-lonb))==0:
+                        continue
+                    barylat=(lata+latb+latc)/3.0
+                    barylon=(lona+lonb+lonc)/3.0
+                    alt_seeds.append([barylon,barylat])
+                    for [initp,endp] in [[a,b],[b,c],[c,a]]:
+                        strnodei=dico_idx_nodes[initp]
+                        strnodee=dico_idx_nodes[endp]
+                        if strnodee+'|'+strnodei in dico_edges:
+                            dico_edges[strnodee+'|'+strnodei]='patch'
+                        else:
+                            dico_edges[strnodei+'|'+strnodee]='patch'
+            except:
+                pass
+    f.close()
+    return [latmin,latmax,lonmin,lonmax]
+#############################################################################
+
+#############################################################################
+def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges):
     dico_edges_tmp={}
     xgrid=[]  # x coordinates of vertical grid lines
     ygrid=[]  # y coordinates of horizontal grid lines
@@ -1207,10 +1456,8 @@ def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
     for edge in dico_edges:
         initpt=edge.split('|')[0]
         endpt=edge.split('|')[1]
-        xi=xcoord(initpt,dico_nodes)
-        yi=ycoord(initpt,dico_nodes)
-        xf= xcoord(endpt,dico_nodes)
-        yf= ycoord(endpt,dico_nodes)
+        [xi,yi]=xycoords(initpt,lat0,lon0)
+        [xf,yf]=xycoords(endpt,lat0,lon0)
         if ((yi<0 and 0<yf) or (yi>0 and 0>yf)):
             xcross= (0-yf)/(yi-yf)*xi+(yi-0)/(yi-yf)*xf
             if xcross>0 and xcross<1:
@@ -1270,10 +1517,8 @@ def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
     for edge in dico_edges:
         initpt=edge.split('|')[0]
         endpt=edge.split('|')[1]
-        xi=xcoord(initpt,dico_nodes)
-        yi=ycoord(initpt,dico_nodes)
-        xf= xcoord(endpt,dico_nodes)
-        yf= ycoord(endpt,dico_nodes)
+        [xi,yi]=xycoords(initpt,lat0,lon0)
+        [xf,yf]=xycoords(endpt,lat0,lon0)
         if ((xi<0 and 0<xf) or (xi>0 and 0>xf)):
             ycross= (0-xf)/(xi-xf)*yi+(xi-0)/(xi-xf)*yf
             if ycross>0 and ycross<1:
@@ -1334,10 +1579,8 @@ def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
     for edge in dico_edges:
         initpt=edge.split('|')[0]
         endpt=edge.split('|')[1]
-        xi=xcoord(initpt,dico_nodes)
-        yi=ycoord(initpt,dico_nodes)
-        xf= xcoord(endpt,dico_nodes)
-        yf= ycoord(endpt,dico_nodes)
+        [xi,yi]=xycoords(initpt,lat0,lon0)
+        [xf,yf]=xycoords(endpt,lat0,lon0)
         til_yi=floor((1-log(tan((90+lat0+yi)*pi/360))/pi)*(2**(meshzl-1)))
         til_yf=floor((1-log(tan((90+lat0+yf)*pi/360))/pi)*(2**(meshzl-1)))
         til_yi=(til_yi//16)*16
@@ -1350,7 +1593,13 @@ def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
             y0=360/pi*atan(exp(pi*(1-(til_y0)/(2**(meshzl-1)))))-90-lat0
             xcross= (y0-yf)/(yi-yf)*xi+(yi-y0)/(yi-yf)*xf
             xcuts[y0]=xcuts[y0]+[xcross]
-            keep_node_xy(xcross,y0,lat0,lon0,dico_nodes)
+            attribute=''
+            try:
+                attribute=(y0-yf)/(yi-yf)*dico_nodes[initpt]+(yi-y0)/(yi-yf)*dico_nodes[endpt]
+                #print(attribute)
+            except:
+                pass
+            keep_node_xy(xcross,y0,lat0,lon0,dico_nodes,attribute)
             keep_edge_str_tmp(initpt,strxy(xcross,y0,lat0,lon0),\
                    dico_edges[edge],dico_edges_tmp)
             keep_edge_str_tmp(strxy(xcross,y0,lat0,lon0),\
@@ -1365,10 +1614,8 @@ def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
     for edge in dico_edges:
         initpt=edge.split('|')[0]
         endpt=edge.split('|')[1]
-        xi=xcoord(initpt,dico_nodes)
-        yi=ycoord(initpt,dico_nodes)
-        xf= xcoord(endpt,dico_nodes)
-        yf= ycoord(endpt,dico_nodes)
+        [xi,yi]=xycoords(initpt,lat0,lon0)
+        [xf,yf]=xycoords(endpt,lat0,lon0)
         til_xi=floor(((lon0+xi)/180+1)*(2**(meshzl-1)))
         til_xf=floor(((lon0+xf)/180+1)*(2**(meshzl-1)))
         til_xi=(til_xi//16)*16
@@ -1381,7 +1628,13 @@ def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
             x0=(til_x0/(2**(meshzl-1))-1)*180-lon0
             ycross= (x0-xf)/(xi-xf)*yi+(xi-x0)/(xi-xf)*yf
             ycuts[x0]=ycuts[x0]+[ycross]
-            keep_node_xy(x0,ycross,lat0,lon0,dico_nodes)
+            attribute=''
+            try:
+                attribute=(x0-xf)/(xi-xf)*dico_nodes[initpt]+(xi-x0)/(xi-xf)*dico_nodes[endpt]
+                #print(attribute)
+            except:
+                pass
+            keep_node_xy(x0,ycross,lat0,lon0,dico_nodes,attribute)
             keep_edge_str_tmp(initpt,strxy(x0,ycross,lat0,lon0),dico_edges[edge],\
                    dico_edges_tmp)
             keep_edge_str_tmp(strxy(x0,ycross,lat0,lon0),endpt,dico_edges[edge],\
@@ -1390,16 +1643,32 @@ def cut_edges_with_grid(lat0,lon0,dico_nodes,dico_edges,orthogrid=True):
             dico_edges_tmp[edge]=dico_edges[edge]
 
     # finally we include edges that are formed by cutted grid lines
+    # AND also the values of dico_nodes if needed, e.g. at grid intersections
+    # falling inside a patch zone
     for y in xcuts:
         xcuts[y].sort()
         for k in range(0,len(xcuts[y])-1):
             dico_edges_tmp[strxy(xcuts[y][k],y,lat0,lon0)+'|'+\
                       strxy(xcuts[y][k+1],y,lat0,lon0)]='orthogrid'
+        for k in range(1,len(xcuts[y])-1):
+            p1=strxy(xcuts[y][k],y,lat0,lon0)
+            p2=strxy(xcuts[y][k-1],y,lat0,lon0)
+            p3=strxy(xcuts[y][k+1],y,lat0,lon0)
+            alpha=(xcuts[y][k]-xcuts[y][k-1])/(xcuts[y][k+1]-xcuts[y][k-1])
+            if dico_nodes[p1]==-32768 and dico_nodes[p2]!=-32768 and dico_nodes[p3]!=-32768:
+                dico_nodes[p1]=(1-alpha)*dico_nodes[p2] + alpha*dico_nodes[p3]
     for x in ycuts:
         ycuts[x].sort()
         for k in range(0,len(ycuts[x])-1):
             dico_edges_tmp[strxy(x,ycuts[x][k],lat0,lon0)+'|'+\
                       strxy(x,ycuts[x][k+1],lat0,lon0)]='orthogrid'
+        for k in range(1,len(ycuts[x])-1):
+            p1=strxy(x,ycuts[x][k],lat0,lon0)
+            p2=strxy(x,ycuts[x][k-1],lat0,lon0)
+            p3=strxy(x,ycuts[x][k+1],lat0,lon0)
+            alpha=(ycuts[x][k]-ycuts[x][k-1])/(ycuts[x][k+1]-ycuts[x][k-1])
+            if dico_nodes[p1]==-32768 and dico_nodes[p2]!=-32768 and dico_nodes[p3]!=-32768:
+                dico_nodes[p1]=(1-alpha)*dico_nodes[p2] + alpha*dico_nodes[p3]
     return dico_edges_tmp
 #############################################################################
 
@@ -1678,11 +1947,11 @@ def downloaded_dem_filename(lat,lon,source):
 #  Chargement en mémoire des DEM. Si aucun fichier spécifié de Ferranti a la
 #   priorité sur SRTM là où   il est disponible.
 ##############################################################################
-def load_altitude_matrix(lat,lon,filename='None'):
+def load_altitude_matrix(lat,lon,filename=''):
     filename_srtm1=downloaded_dem_filename(lat,lon,'SRTMv3_1(void filled)')
     filename_srtm3=downloaded_dem_filename(lat,lon,'SRTMv3_3(void filled)')
     filename_viewfinderpanorama=downloaded_dem_filename(lat,lon,'de_Ferranti')
-    if filename=='None':
+    if filename=='':
         if os.path.isfile(filename_viewfinderpanorama):
             filename=filename_viewfinderpanorama
         elif os.path.isfile(filename_srtm1):
@@ -1841,6 +2110,30 @@ def altitude(x,y,alt_dem,ndem):
     return z
 ##############################################################################
 
+##############################################################################
+# Altitude obtenue par interpolation pour les points hors de la grille du
+# fichier DEM.
+##############################################################################
+def altitude_vec(x,y,alt_dem,ndem):
+    N=ndem-1
+    x=numpy.maximum.reduce([x,numpy.zeros(x.shape)])
+    x=numpy.minimum.reduce([x,numpy.ones(x.shape)])
+    y=numpy.maximum.reduce([y,numpy.zeros(y.shape)])
+    y=numpy.minimum.reduce([y,numpy.ones(y.shape)])
+    px=x*N
+    py=y*N
+    nx=px.astype(numpy.uint16)
+    Nminusny=N-py.astype(numpy.uint16)
+    rx=px-nx
+    ry=py+Nminusny-N
+    t1=[alt_dem[i][j] for i,j in zip(Nminusny,nx)]
+    t2=[alt_dem[i][j] for i,j in zip((Nminusny-1)*(Nminusny>=1),(nx+1)*(nx<N))]
+    t3=[alt_dem[i][j] for i,j in zip(Nminusny,(nx+1)*(nx<N))]
+    t4=[alt_dem[i][j] for i,j in zip((Nminusny-1)*(Nminusny>=1),nx)]
+    return ((1-rx)*t1+ry*t2+(rx-ry)*t3)*(rx>=ry)+((1-ry)*t1+rx*t2+(ry-rx)*t4)*(rx<ry)
+##############################################################################
+
+
 
 ##############################################################################
 #  Construction des altitudes des points du maillage, et mise à zéro des
@@ -1855,9 +2148,14 @@ def build_3D_vertex_array(lat,lon,alt_dem,ndem,build_dir):
     apt_filename  = build_dir+dir_sep+'Data'+strlat+strlon+'.apt'
     f_node = open(node_filename,'r')
     f_ele  = open(ele_filename,'r')
-    f_apt  = open(apt_filename,'r')
+    try:
+        f_apt  = open(apt_filename,'r')
+        f_apt_loaded=True
+    except:
+        f_apt_loaded=False
     nbr_pt=int(f_node.readline().split()[0])
     vertices=numpy.zeros(5*nbr_pt)
+    input_alt=numpy.zeros(nbr_pt)
     print("-> Loading of the mesh computed by Triangle4XP.")
     for i in range(0,nbr_pt):
         coordlist=f_node.readline().split()
@@ -1866,6 +2164,7 @@ def build_3D_vertex_array(lat,lon,alt_dem,ndem,build_dir):
         vertices[5*i+2]=float(coordlist[3])
         vertices[5*i+3]=float(coordlist[4])
         vertices[5*i+4]=float(coordlist[5])
+        input_alt[i]=float(coordlist[6])
     f_node.close()
     # Now we modify the altitude we got from the DEM in certain
     # circumstances, because we want flat water, flat (or correctly sloped
@@ -1877,7 +2176,6 @@ def build_3D_vertex_array(lat,lon,alt_dem,ndem,build_dir):
     # i.e. (with ele marker = 2) to zero altitude.
     f_ele=open(ele_filename,'r')
     nbr_tri=int(f_ele.readline().split()[0])
-    regiontag=True
     for i in range(0,nbr_tri):
         idx=f_ele.readline().split()
         v1=(int(idx[1])-1)
@@ -1909,7 +2207,14 @@ def build_3D_vertex_array(lat,lon,alt_dem,ndem,build_dir):
                 vertices[5*v1+2]=zmean
                 vertices[5*v2+2]=zmean
                 vertices[5*v3+2]=zmean
-        elif (100 <= int(idx[4])) and (int(idx[4])<1000):
+        elif idx[4] in dico_tri_markers['altitude']:
+            vertices[5*v1+2]=input_alt[v1]
+            #if input_alt[v1]==-32768: print(v1)
+            vertices[5*v2+2]=input_alt[v2]
+            #if input_alt[v2]==-32768: print(v2)
+            vertices[5*v3+2]=input_alt[v3]
+            #if input_alt[v3]==-32768: print(v3)
+        elif (100 <= int(idx[4])) and (int(idx[4])<1000) and f_apt_loaded:
             if idx[4] in dico_alt_ap:
                 height=dico_alt_ap[idx[4]]
                 vertices[5*v1+2]=height
@@ -1946,7 +2251,7 @@ def build_3D_vertex_array(lat,lon,alt_dem,ndem,build_dir):
             vertices[5*v2+2]=height
             vertices[5*v3+2]=height
             dico_alt_ap[idx[4]]=height
-        elif int(idx[4])>=1000 and int(idx[4])<10000:
+        elif int(idx[4])>=1000 and int(idx[4])<10000 and f_apt_loaded:
             if idx[4] in dico_alt_ap:
                 height=dico_alt_ap[idx[4]]
                 vertices[5*v1+2]=height
@@ -1980,7 +2285,7 @@ def build_3D_vertex_array(lat,lon,alt_dem,ndem,build_dir):
             vertices[5*v2+2]=height
             vertices[5*v3+2]=height
             dico_alt_ap[idx[4]]=height
-        elif 10000 <= int(idx[4]):
+        elif 10000 <= int(idx[4]) and f_apt_loaded:
             if idx[4] in dico_alt_ap:
                 tmplist=dico_alt_ap[idx[4]]
             else:
@@ -2371,7 +2676,7 @@ def build_jpeg_ortho(strlat,strlon,til_x_left,til_y_top,zoomlevel,website):
     jobs=[]
 
     try:
-        APL_feed(website)
+        APL_feed(til_x_left,til_y_top,zommlevel,website)
     except:
         pass
 
@@ -3001,24 +3306,24 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
         pool_rows=pool_rows*2
         pool_cols=pool_cols*2
         print("   Pool division = 32")
-    elif maxptpool<=16383:
-        pool_rows=pool_rows//2
-        pool_cols=pool_cols//2
-        print("   Pool division = 8")
+    #elif maxptpool<=16383:
+    #    pool_rows=pool_rows//2
+    #    pool_cols=pool_cols//2
+    #    print("   Pool division = 8")
     else:
         print("   Pool division = 16")
     f_mesh.close()
 
     # test
-    #pool_rows=16
-    #pool_cols=16
+    #pool_rows=32
+    #pool_cols=32
 
     pool_nbr  = pool_rows*pool_cols
     pools_params=numpy.zeros((4*pool_nbr,18),'float32')
     pools_planes=numpy.zeros(4*pool_nbr,'uint32')
-    pools_planes[0:pool_nbr]=7
-    pools_planes[pool_nbr:2*pool_nbr]=5
-    pools_planes[2*pool_nbr:4*pool_nbr]=9
+    pools_planes[0:pool_nbr]=7  # for points with s,t coords
+    pools_planes[pool_nbr:2*pool_nbr]=5 # for X-Plane water
+    pools_planes[2*pool_nbr:4*pool_nbr]=9 # for for points with s,t and border tex (masks)
     pools_lengths=numpy.zeros((4*pool_nbr),'uint32')
     try:
         pools=numpy.zeros((4*pool_nbr,9*pools_max_points),'uint16')
@@ -3048,11 +3353,79 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
             except:
                 return
     dico_new_pt={}
-    dico_textures={'terrain_Water':0,'None':1}
-    terrain_def="terrain_Water\0lib/g10/terrain10/fruit_tmp_wet_hill.ter\0"
     textures={}
-    textures[0]=collections.defaultdict(list)
-    textures[1]=collections.defaultdict(list)
+    dico_textures={}
+    try:
+        raster_map_im=Image.open(build_dir+dir_sep+'terrain_map_'+strlat+strlon+'.png').convert("L")
+        raster_map_array=numpy.array(raster_map_im,dtype=numpy.uint8)
+        try:
+            raster_map_im_mult=Image.open(build_dir+dir_sep+'terrain_map_mult_'+strlat+strlon+'.png').convert("L")
+            raster_map_array_mult=numpy.array(raster_map_im_mult,dtype=numpy.uint8)
+            mult_draw=True
+            #print("mult_draw")
+        except:
+            mult_draw=False
+            #print("mult_draw")
+        fin=open(build_dir+dir_sep+'PROP.atm','rb')
+        bPROP=fin.read()
+        fin.close()
+        try:
+            fin=open(build_dir+dir_sep+'TERT.atm','rb')
+            bTERT=fin.read()
+            fin.close()
+        except:
+            bTERT=b''
+        try:
+            fin=open(build_dir+dir_sep+'OBJT.atm','rb')
+            bOBJT=fin.read()
+            fin.close()
+        except:
+            bOBJT=b''
+        try:
+            fin=open(build_dir+dir_sep+'POLY.atm','rb')
+            bPOLY=fin.read()
+            fin.close()
+        except:
+            bPOLY=b''
+        try:
+            fin=open(build_dir+dir_sep+'NETW.atm','rb')
+            bNETW=fin.read()
+            fin.close()
+        except:
+            bNETW=b''
+        try:
+            fin=open(build_dir+dir_sep+'DEMN.atm','rb')
+            bDEMN=fin.read()
+            fin.close()
+        except:
+            bDEMN=b''
+        fin=open(build_dir+dir_sep+'GEOD.atm','rb')
+        bGEOD=fin.read()
+        (nbr_pools_yet_in,)=struct.unpack('<I',bGEOD[-4:])
+        #print(nbr_pools_yet_in)
+        bGEOD=bGEOD[:-4]
+        fin.close()
+        try:
+            fin=open(build_dir+dir_sep+'DEMS.atm','rb')
+            bDEMS=fin.read()
+            fin.close()
+        except:
+            bDEMS=b''
+        fin=open(build_dir+dir_sep+'CMDS.atm','rb')
+        bCMDS=fin.read()
+        fin.close()
+        dico_textures={}
+        for i in range(len(bTERT.split(b'\0'))-1):
+            dico_textures[str(i)]=i
+            textures[i]=collections.defaultdict(list)
+    except:
+        bPROP=bTERT=bOBJT=bPOLY=bNETW=bDEMN=bGEOD=bDEMS=bCMDS=b''
+        nbr_pools_yet_in=0
+        dico_textures={'terrain_Water':0,'None':1}
+        bTERT=bytes("terrain_Water\0lib/g10/terrain10/fruit_tmp_wet_hill.ter\0",'ascii')
+        textures[0]=collections.defaultdict(list)
+        textures[1]=collections.defaultdict(list)
+    #print(dico_textures)
     skipped_sea_textures=[]
     dico_mask={}
 
@@ -3112,6 +3485,7 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
     len_dico_new_pt=0
     total_cross_pool=0
     step_stones=nbr_tri_in//100
+    if step_stones==0: step_stones=1
     percent=-1
     for i in range(0,nbr_tri_in):
         if i%step_stones==0:
@@ -3135,10 +3509,23 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
         [lon2,lat2,z2,u2,v2]=pt_in[5*n2:5*n2+5]
         [lon3,lat3,z3,u3,v3]=pt_in[5*n3:5*n3+5]
         texture=attribute_texture(lat1,lon1,lat2,lon2,lat3,lon3,ortho_list,tri_type)
-
+        if texture=='None':
+            pixx=int(((lon1+lon2+lon3)/3-lon0)*raster_resolution)
+            pixy=int((lat0+1-(lat1+lat2+lat3)/3)*raster_resolution)
+            #print(pixx,pixy)
+            if not mult_draw:
+                texture=str(raster_map_array[pixy,pixx])
+            else:
+                texture=str(raster_map_array[pixy,pixx]+256*raster_map_array_mult[pixy,pixx])
+            #texture='0'
+            print(texture)
+            #print("coucou"+texture+"coucou")
+            #if texture=='terrain_Water': texture='None'
+            #print(texture)
+            #print(tri_type)
         # do we need to download a texture and/or to create a ter file ?
         if (tri_type=='0'):
-            if str(texture) in dico_textures: # 'None' is in dico_textures by definition
+            if str(texture) in dico_textures:
                 texture_idx=dico_textures[str(texture)]
             else:
                 texture_idx=len(dico_textures)
@@ -3167,12 +3554,14 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
                             print("   Texture file "+file_name+"."+dds_or_png+\
                             " already present.")
                 create_terrain_file(build_dir,file_name,*texture)
-                terrain_def+='terrain/'+file_name+'.ter\0'
+                bTERT+=bytes('terrain/'+file_name+'.ter\0','ascii')
             texture_overlay_idx=-1
         elif water_option in [2,3]:
             texture_idx=0
             #if (tri_type=='1' and use_masks_for_inland==False) and (texture != 'None'):
-            if (texture != 'None') and ((tri_type=='1' and use_masks_for_inland==False) or (int(texture[2])<14 and sea_texture_params!=[])):
+            if len(texture)<4:
+                texture_overlay_idx=-1
+            elif ((tri_type=='1' and use_masks_for_inland==False) or (int(texture[2])<14 and sea_texture_params!=[])):
                 if str(texture)+'_overlay' in dico_textures:
                     texture_overlay_idx=dico_textures[str(texture)+'_overlay']
                 else:
@@ -3202,8 +3591,8 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
                                 print("   Texture file "+file_name+"."+dds_or_png+\
                                 " already present.")
                     create_overlay_file(build_dir,file_name,*texture)
-                    terrain_def+='terrain/'+file_name+'_overlay.ter\0'
-            elif (texture != 'None') and (tri_type in ['2','3'] or use_masks_for_inland==True) :
+                    bTERT+=bytes('terrain/'+file_name+'_overlay.ter\0','ascii')
+            elif (tri_type in ['2','3'] or use_masks_for_inland==True) :
                 if str(texture)+'_sea_overlay' in dico_textures:
                     texture_overlay_idx=dico_textures[str(texture)+'_sea_overlay']
                 elif str(texture) not in skipped_sea_textures:
@@ -3243,13 +3632,13 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
                                     print("   Texture file "+file_name+"."+dds_or_png+\
                                     " already present.")
                         create_sea_overlay_file(build_dir,file_name,mask_name,*texture)
-                        terrain_def+='terrain/'+file_name+'_sea_overlay.ter\0'
+                        bTERT+=bytes('terrain/'+file_name+'_sea_overlay.ter\0','ascii')
                     else:
                         skipped_sea_textures.append(str(texture))
                         texture_overlay_idx=-1
                 else:
                     texture_overlay_idx=-1
-            else: # texture = 'None'
+            else:
                 texture_overlay_idx=-1
         else:  # water_overlay = False
             texture_idx=0
@@ -3263,7 +3652,7 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
                     [pool_idx,pos_in_pool]=dico_new_pt[str(n)+'_'+str(texture_idx)]
                 else:
                     [lon,lat,z,u,v]=pt_in[5*n:5*n+5]
-                    if texture!='None':
+                    if type(texture) is list:
                         [s,t]=st_coord(lat,lon,*texture)
                     else:
                         [s,t]=[0,0]
@@ -3465,11 +3854,27 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
             print("That could be related to an OSM error, but also to a too large number of")
             print("triangles due to a too low value of the parameter curv_tol (cfr log in Step 2).")
     for pool_idx in range(0,4*pool_nbr):
-        pools_params[pool_idx,5]=pools_z_min[pool_idx]*100000
-        pools_params[pool_idx,4]=(pools_z_max[pool_idx]-pools_z_min[pool_idx])*100000 +100
+        altmin=pools_z_min[pool_idx]*100000
+        altmax=pools_z_max[pool_idx]*100000
+        if altmax-altmin < 770:
+            scale=771   # 65535= 771*85
+            inv_stp=85
+        elif altmax-altmin < 1284:
+            scale=1285 # 66535=1285*51
+            inv_stp=51
+        elif altmax-altmin < 4368:
+            scale=4369 # 65535=4369*15
+            inv_stp=15
+        else:
+            scale=13107
+            inv_stp=5
+        scale=4369
+        inv_stp=15
+        pools_params[pool_idx,4]=scale
+        pools_params[pool_idx,5]=floor(altmin)
         for pos_in_pool in range(0,pools_lengths[pool_idx]):
             pools[pool_idx,pools_planes[pool_idx]*pos_in_pool+2]=int(round((pools_z_temp[pool_idx,\
-                    pos_in_pool]*100000-pools_params[pool_idx,5])/pools_params[pool_idx,4]*65535))
+                    pos_in_pool]*100000-pools_params[pool_idx,5])*inv_stp))
 
     # Now is time to write our DSF to disk, the exact binary format is described on the wiki
     if not os.path.exists(dest_dir):
@@ -3478,18 +3883,19 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
         os.system(copy_cmd+' "'+dest_dir+dir_sep+dsf_file+'.dsf'+'" "'+\
          dest_dir+dir_sep+dsf_file+'.dsf.bak" '+devnull_rdir)
 
-    properties="sim/west\0"+str(lon0)+"\0"+"sim/east\0"+str(lon0+1)+"\0"+\
+    if bPROP==b'':
+        bPROP=bytes("sim/west\0"+str(lon0)+"\0"+"sim/east\0"+str(lon0+1)+"\0"+\
                "sim/south\0"+str(lat0)+"\0"+"sim/north\0"+str(lat0+1)+"\0"+\
-               "sim/creation_agent\0"+"Ortho4XP\0"
+               "sim/creation_agent\0"+"Ortho4XP\0",'ascii')
+    else:
+        bPROP+=b'sim/creation_agent\0Patched by Ortho4XP\0'
+
 
     # Computation of intermediate and of total length
-    size_of_prop_string=len(properties)
-    size_of_terrain_string=len(terrain_def)
-    size_of_head_atom=16+size_of_prop_string
-    size_of_prop_atom=8+size_of_prop_string
-    size_of_defn_atom=48+size_of_terrain_string
-    size_of_tert_atom=8+size_of_terrain_string
-    size_of_geod_atom=8
+    size_of_head_atom=16+len(bPROP)
+    size_of_prop_atom=8+len(bPROP)
+    size_of_defn_atom=48+len(bTERT)+len(bOBJT)+len(bPOLY)+len(bNETW)+len(bDEMN)
+    size_of_geod_atom=8+len(bGEOD)
     for k in range(0,4*pool_nbr):
         if pools_lengths[k]>0:
             size_of_geod_atom+=21+pools_planes[k]*(9+2*pools_lengths[k])
@@ -3505,26 +3911,31 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
     f.write(struct.pack('<I',size_of_head_atom))
     f.write(b"PORP")
     f.write(struct.pack('<I',size_of_prop_atom))
-    f.write(bytes(properties,'ascii'))
+    f.write(bPROP)
 
     # Definitions super-atom
     f.write(b"NFED")
     f.write(struct.pack('<I',size_of_defn_atom))
     f.write(b"TRET")
-    f.write(struct.pack('<I',size_of_tert_atom))
-    f.write(bytes(terrain_def,'ascii'))
+    f.write(struct.pack('<I',8+len(bTERT)))
+    f.write(bTERT)
     f.write(b"TJBO")
-    f.write(struct.pack('<I',8))
+    f.write(struct.pack('<I',8+len(bOBJT)))
+    f.write(bOBJT)
     f.write(b"YLOP")
-    f.write(struct.pack('<I',8))
+    f.write(struct.pack('<I',8+len(bPOLY)))
+    f.write(bPOLY)
     f.write(b"WTEN")
-    f.write(struct.pack('<I',8))
+    f.write(struct.pack('<I',8+len(bNETW)))
+    f.write(bNETW)
     f.write(b"NMED")
-    f.write(struct.pack('<I',8))
+    f.write(struct.pack('<I',8+len(bDEMN)))
+    f.write(bDEMN)
 
     # Geodata super-atom
     f.write(b"DOEG")
     f.write(struct.pack('<I',size_of_geod_atom))
+    f.write(bGEOD)
     for k in range(0,4*pool_nbr):
         if pools_lengths[k]==0:
             continue
@@ -3551,21 +3962,28 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
             return
     except:
         pass
-    # Since we possibly skipped some pools, we rebuild a dico
+    # Since we possibly skipped some pools, and since we possibly
+    # get pools from elsewhere, we rebuild a dico
     # which tells the pool position in the dsf of a pool prior
     # to the stripping :
 
     dico_new_pool={}
-    new_pool_idx=0
+    new_pool_idx=nbr_pools_yet_in
     for k in range(0,4*pool_nbr):
         if pools_lengths[k] != 0:
             dico_new_pool[k]=new_pool_idx
             new_pool_idx+=1
 
+    # DEMS atom
+    if bDEMS!=b'':
+        f.write(b"SMED")
+        f.write(struct.pack('<I',8+len(bDEMS)))
+        f.write(bDEMS)
+
     # Commands atom
 
     # we first compute its size :
-    size_of_cmds_atom=8
+    size_of_cmds_atom=8+len(bCMDS)
     for texture_idx in textures:
         if len(textures[texture_idx])==0:
             continue
@@ -3581,7 +3999,7 @@ def build_dsf(lat0,lon0,ortho_list,water_overlay,\
         print("   Size of CMDS atom : "+str(size_of_cmds_atom)+" bytes.")
     f.write(b'SDMC')                               # CMDS header
     f.write(struct.pack('<I',size_of_cmds_atom))   # CMDS length
-
+    f.write(bCMDS)
     for texture_idx in textures:
         if len(textures[texture_idx])==0:
             continue
@@ -3878,13 +4296,14 @@ def build_overlay(lat,lon,file_to_sniff):
     print("-> Expurging the mesh and the beach polygons from the text DSF")
     f=open(Ortho4XP_dir+dir_sep+'tmp'+dir_sep+'tmp_dsf.txt','r')
     g=open(Ortho4XP_dir+dir_sep+'tmp'+dir_sep+'tmp_dsf_without_mesh.txt','w')
+    terrain_list=[]
     line=f.readline()
     g.write('PROPERTY sim/overlay 1\n')
     while line!='':
         if 'PROPERTY' in line:
             g.write(line)
         elif 'TERRAIN_DEF' in line:
-            pass
+            terrain_list.append(line.split()[1])
         elif 'POLYGON_DEF' in line:
             g.write(line)
         elif 'NETWORK_DEF' in line:
@@ -3902,6 +4321,53 @@ def build_overlay(lat,lon,file_to_sniff):
                 g.write(line)
                 line=f.readline()
             g.write(line)
+        elif 'BEGIN_PATCH' in line:
+            items=line.split()
+            overlay_flag=True if items[-2]=='2' else False
+            terrain_type=int(items[1])
+            overlay_flag=True #!!! DISABLED ON PURPOSE !!!
+        elif 'BEGIN_PRIMITIVE' in line:
+            if overlay_flag:
+                while 'END_PRIMITIVE' not in line:
+                    line=f.readline()
+            else:
+                primitive_type=line.split()[1]
+                if primitive_type=='0':
+                    while True:
+                        line=f.readline()
+                        if 'END_PRIMITIVE' in line: break
+                        [lon1,lat1]=line.split()[1:3]
+                        line=f.readline()
+                        [lon2,lat2]=line.split()[1:3]
+                        line=f.readline()
+                        [lon3,lat3]=line.split()[1:3]
+                        px1=int((float(lon1)-lon)*raster_resolution)
+                        px2=int((float(lon2)-lon)*raster_resolution)
+                        px3=int((float(lon3)-lon)*raster_resolution)
+                        py1=int((lat+1-float(lat1))*raster_resolution)
+                        py2=int((lat+1-float(lat2))*raster_resolution)
+                        py3=int((lat+1-float(lat3))*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=terrain_type)
+                elif primitive_type=='1':
+                    line=f.readline()
+                    [lon1,lat1]=line.split()[1:3]
+                    line=f.readline()
+                    [lon2,lat2]=line.split()[1:3]
+                    while True:
+                        line=f.readline()
+                        if 'END_PRIMITIVE' in line: break
+                        [lon3,lat3]=line.split()[1:3]
+                        px1=int((float(lon1)-lon)*raster_resolution)
+                        px2=int((float(lon2)-lon)*raster_resolution)
+                        px3=int((float(lon3)-lon)*raster_resolution)
+                        py1=int((lat+1-float(lat1))*raster_resolution)
+                        py2=int((lat+1-float(lat2))*raster_resolution)
+                        py3=int((lat+1-float(lat3))*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=terrain_type)
+                        [lon1,lat1]=[lon2,lat2]
+                        [lon2,lat2]=[lon3,lat3]
+                else:
+                    print("Oscar, you need to encode type 2 primitives as well !!!!!!!!!!!!!!!!!!")
         else:
             pass
         line=f.readline()
@@ -3923,6 +4389,10 @@ def build_overlay(lat,lon,file_to_sniff):
     print("-> Coping the final overlay DSF in "+dest_dir)
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)
+    h=open(dest_dir+dir_sep+'terrain_list_'+strlat+strlon+'.txt','w')
+    for terrain in terrain_list:
+        h.write(terrain+'\n')
+    h.close()
     os.system(copy_cmd+' "'+Ortho4XP_dir+dir_sep+'tmp'+dir_sep+'tmp_dsf_without_mesh.dsf" '+\
               ' "'+dest_dir+dir_sep+strlat+strlon+'.dsf"')
     os.system(delete_cmd+' '+Ortho4XP_dir+dir_sep+'tmp'+dir_sep+'*.dsf' +devnull_rdir)
@@ -3936,7 +4406,6 @@ def build_overlay(lat,lon,file_to_sniff):
             '____________________________________')
     return
 ##############################################################################
-
 
 ##############################################################################
 def build_masks(lat,lon,build_dir,mesh_filename_list):
@@ -4258,6 +4727,25 @@ def build_tile_list(tile_list,build_dir_option,read_config,use_existing_mesh,bbm
 
 
 ##############################################################################
+def in_bbox(point,bbox):
+    return (point[0] >= bbox[0]) and (point[0] <= bbox[1]) and (point[1]>=bbox[2]) and (point[1]<=bbox[3])
+##############################################################################
+
+##############################################################################
+def compute_bbox(poly):
+    latmin=90
+    latmax=-90
+    lonmin=180
+    lonmax=-180
+    for lat,lon in zip(poly[::2],poly[1::2]):
+        latmin = lat if lat<latmin else latmin
+        latmax = lat if lat>latmax else latmax
+        lonmin = lon if lon<lonmin else lonmin
+        lonmax = lon if lon>lonmax else lonmax
+    return [latmin-0.02,latmax+0.02,lonmin-0.02,lonmax+0.02]
+##############################################################################
+
+##############################################################################
 def point_in_polygon(point,polygon):
     '''
     This procedures determines wether the input point belongs to the
@@ -4310,6 +4798,32 @@ def point_in_polygon(point,polygon):
         return True
 ##############################################################################
 
+
+##############################################################################
+def do_overlap(pol1,pol2):
+    for x,y in zip(pol1[::2],pol1[1::2]):
+        if point_in_polygon([x,y],pol2): return True
+    for x,y in zip(pol2[::2],pol2[1::2]):
+        if point_in_polygon([x,y],pol1): return True
+    for x1,y1,x2,y2 in zip(pol1[:-2:2],pol1[1:-1:2],pol1[2::2],pol1[3::2]):
+        for x3,y3,x4,y4 in zip(pol2[:-2:2],pol2[1:-1:2],pol2[2::2],pol2[3::2]):
+            if do_intersect_transverse([x1,y1],[x2,y2],[x3,y3],[x4,y4]):
+                return True
+    return False
+##############################################################################
+
+##############################################################################
+def do_intersect_transverse(a,b,c,d):
+    return counterclockwise(a,c,d)!=counterclockwise(b,c,d)\
+            and counterclockwise(a,b,c) != counterclockwise(a,b,d)
+##############################################################################
+
+##############################################################################
+def counterclockwise(a,b,c):
+    return (c[1]-a[1])*(b[0]-a[0])>(b[1]-a[1])*(c[0]-a[0])
+##############################################################################
+
+
 ##############################################################################
 # distance squared from a point "point" to the line through "p1" et "p2"
 ##############################################################################
@@ -4342,6 +4856,8 @@ def ramer_douglas_peucker(polygon,tol):
     else:
         return [polygon[0],polygon[-1]]
 ##############################################################################
+
+
 
 
 ##############################################################################
@@ -4531,12 +5047,12 @@ class Earth_Preview_window(Toplevel):
                         if os.path.isdir(link):
                             if os.path.samefile(os.path.realpath(link),os.path.realpath(self.working_dir+dir_sep+'zOrtho4XP_'+strlat+strlon)):
                                 self.canvas.itemconfig(self.dico_tiles_done[str(lat)+'_'+str(lon)],stipple='gray50')
-        elif self.working_type=='onedir':
+        elif self.working_type=='onedir' and os.path.exists(self.working_dir+dir_sep+'Earth nav data'):
             for dirname in os.listdir(self.working_dir+dir_sep+'Earth nav data'):
                 for filename in os.listdir(self.working_dir+dir_sep+'Earth nav data'+dir_sep+dirname):
                     try:
                         lat=int(filename[0:3])
-                        lon=int(filename[3:7])
+
                     except:
                         continue
                     [x0,y0]=wgs84_to_pix(lat+1,lon,self.earthzl)
@@ -5641,20 +6157,10 @@ class Ortho4XP_Graphical(Tk):
         [lat,lon]=self.load_latlon()
         if lat=='error':
             return
-        try:
-            min_area=float(self.min_area.get())
-        except:
-            print('\nFailure : parameter min_area wrongly encoded.')
-            print('_____________________________________________________________'+\
-            '____________________________________')
-            return
-        if (min_area<0):
-            print('\nFailure : parameter min_area exceeds limits.')
-            print('_____________________________________________________________'+\
-            '____________________________________')
-            return
         strlat='{:+.0f}'.format(lat).zfill(3)
         strlon='{:+.0f}'.format(lon).zfill(4)
+        strlatround='{:+.0f}'.format(floor(lat/10)*10).zfill(3)
+        strlonround='{:+.0f}'.format(floor(lon/10)*10).zfill(4)
         if self.build_dir_entry.get()=='':
             build_dir=Ortho4XP_dir+dir_sep+'Tiles'+dir_sep+'zOrtho4XP_'+strlat+strlon
         else:
@@ -5662,11 +6168,40 @@ class Ortho4XP_Graphical(Tk):
             if build_dir[-1]=='/':
                 build_dir=build_dir[:-1]+dir_sep+'zOrtho4XP_'+strlat+strlon
         #water_option= self.water_type.get()
-        print("\nStep 1 : Building OSM and patch data for tile "+strlat+strlon+" : ")
-        print("--------\n")
-        fargs_get_osm=[lat,lon,water_option,build_dir,self.map_choice.get()]
-        build_dir_thread=threading.Thread(target=build_poly_file,args=fargs_get_osm)
-        build_dir_thread.start()
+        website=self.map_choice.get()
+        if website!='None':
+            try:
+                min_area=float(self.min_area.get())
+            except:
+                print('\nFailure : parameter min_area wrongly encoded.')
+                print('_____________________________________________________________'+\
+                      '____________________________________')
+                return
+            if (min_area<0):
+                print('\nFailure : parameter min_area exceeds limits.')
+                print('_____________________________________________________________'+\
+                      '____________________________________')
+                return
+            print("\nStep 1 : Building OSM and patch data for tile "+strlat+strlon+" : ")
+            print("--------\n")
+            fargs_get_osm=[lat,lon,water_option,build_dir,self.map_choice.get()]
+            build_dir_thread=threading.Thread(target=build_poly_file,args=fargs_get_osm)
+            build_dir_thread.start()
+        else:
+            print("\nStep 1 : Building landclass and patch data for tile "+strlat+strlon+" : ")
+            print("--------\n")
+            base_sniff_dir=self.sniff_dir_entry.get()
+            file_to_sniff=base_sniff_dir+dir_sep+"Earth nav data"+dir_sep+\
+                      strlatround+strlonround+dir_sep+strlat+strlon+'.dsf'
+            if not os.path.isfile(file_to_sniff):
+                print('\nFailure : there is no file to sniff from at the indicated place.')
+                print('_____________________________________________________________'+\
+                      '____________________________________')
+                return
+            dem_alternative=self.custom_dem_entry.get()
+            fargs_build_poly=[lat,lon,build_dir,file_to_sniff,dem_alternative]
+            build_poly_thread=threading.Thread(target=build_landclass_poly_file,args=fargs_build_poly)
+            build_poly_thread.start()
         return
 
     def build_mesh_ifc(self):
@@ -6229,6 +6764,1539 @@ class Ortho4XP_Graphical(Tk):
 
 ##############################################################################
 
+##############################################################################
+#
+# The following is essentially taken with minor modifications from Jonathan
+# Harris (Marginal) DSFLib.py
+#
+def read_dsf_mesh(lat,lon,build_dir,file_to_sniff,poly_list,bbox_list,dem_alternative=''):
+    skipnetworks=True
+    timer=time.time()
+    terrain_im=Image.new("L",(raster_resolution,raster_resolution))
+    terrain_draw=ImageDraw.Draw(terrain_im)
+    strlat='{:+.0f}'.format(lat).zfill(3)
+    strlon='{:+.0f}'.format(lon).zfill(4)
+    strlatround='{:+.0f}'.format(floor(lat/10)*10).zfill(3)
+    strlonround='{:+.0f}'.format(floor(lon/10)*10).zfill(4)
+    file_to_sniff_loc=Ortho4XP_dir+dir_sep+"tmp"+dir_sep+strlat+strlon+'.dsf'
+    # Making a copy of the original DSF in tmp dir
+    os.system(copy_cmd + '  "'+file_to_sniff+'" "'+file_to_sniff_loc+'"')
+    file = open(file_to_sniff_loc,'rb')
+    # check for 7z compression and unzip if necessary
+    dsfid = file.read(2).decode('ascii')
+    if dsfid == '7z':
+        file.close()
+        os.system(rename_cmd+'"'+file_to_sniff_loc+'" "'+file_to_sniff_loc+'.7z" '+\
+              devnull_rdir)
+        os.system(unzip_cmd+' e -o'+Ortho4XP_dir+dir_sep+'tmp'+' "'+\
+              file_to_sniff_loc+'.7z"')
+        file = open(file_to_sniff_loc,'rb')
+    #########
+    # read atoms headers and save their positions
+    table={}
+    file.seek(-16,os.SEEK_END)
+    end=file.tell()
+    p=12
+    while p<end:
+        file.seek(p)
+        d=file.read(8)
+        (c,l)=struct.unpack('<4sI', d)
+        table[c]=p+4
+        p+=l
+    # Header Atom
+    file.seek(table[b'DAEH'])
+    (l,)=struct.unpack('<I', file.read(4))
+    headend=file.tell()+l-8
+    file.read(4)
+    (l,)=struct.unpack('<I', file.read(4))
+    c=file.read(l-9).split(b'\0')
+    file.read(1)
+    overlay=0
+    for i in range(0, len(c)-1, 2):
+        if c[i]==b'sim/overlay': overlay=int(c[i+1])
+        elif c[i]==b'sim/west': west=int(c[i+1])
+    file.seek(headend)
+
+    # Definitions Atom
+    file.seek(table[b'NFED'])
+    (l,)=struct.unpack('<I', file.read(4))
+    defnend=file.tell()+l-8
+    terrain=objects=polygons=networks=rasternames=[]
+    while file.tell()<defnend:
+        c=file.read(4)
+        (l,)=struct.unpack('<I', file.read(4))
+        if l==8:
+            pass	# empty
+        elif c==b'TRET':
+            terrain=[x.decode('ascii') for x in file.read(l-9).split(b'\0')]
+            print("terrain length : ",len(terrain))
+            file.read(1)
+        elif c==b'TJBO':
+            objects=[x.decode() for x in file.read(l-9).split(b'\0')]	# X-Plane only supports ASCII
+            file.read(1)
+        elif c==b'YLOP':
+            polygons=[x.decode() for x in file.read(l-9).split(b'\0')]	# X-Plane only supports ASCII
+            file.read(1)
+        elif c==b'WTEN':
+            networks=file.read(l-9).split(b'\0')
+            file.read(1)
+        elif c==b'NMED':
+            rasternames=file.read(l-9).split(b'\0')
+            file.read(1)
+        else:
+            file.seek(l-8, 1)
+
+    if len(terrain)>256:
+        terrain_im_mult=Image.new("L",(raster_resolution,raster_resolution))
+        terrain_draw_mult=ImageDraw.Draw(terrain_im_mult)
+        mult_draw=True
+    else:
+        mult_draw=False
+    # Geodata Atom
+    clock=time.time()	# Processor time
+    file.seek(table[b'DOEG'])
+    (l,)=struct.unpack('<I', file.read(4))
+    geodend=file.tell()+l-8
+    ####
+    pool=[]
+    scal=[]
+    po32=[]
+    sc32=[]
+    nbr_of_pools=0
+    while file.tell()<geodend:
+        c=file.read(4)
+        (l,)=struct.unpack('<I', file.read(4))
+        if c == b'23OP':
+            print("pool32 :",l)
+            file.seek(l-8,1)
+        elif c == b'23CS':
+            file.seek(l-8, 1)
+        elif c == b'LOOP':
+            (n,p)=struct.unpack('<IB', file.read(5))
+            thispool = numpy.empty((n,p), numpy.uint16)
+            # Pool data is supplied in column order (by "plane"), so use numpy slicing to assign
+            for i in range(p):
+                (e,)=struct.unpack('<B', file.read(1))	# encoding type - default DSFs use e=3
+                if e&2:		# RLE
+                    offset = 0
+                    while offset<n:
+                        (r,)=struct.unpack('<B', file.read(1))
+                        if (r&128):	# repeat
+                            (d,)=struct.unpack('<H', file.read(2))
+                            thispool[offset:offset+(r&127),i] = d
+                            offset += (r&127)
+                        else:		# non-repeat
+                            thispool[offset:offset+r,i] = numpy.fromstring(file.read(r*2), '<H')
+                            offset += r
+                else:		# raw
+                    thispool[:,i] = numpy.fromstring(file.read(n*2), '<H')
+                if e&1:		# differenced
+                    thispool[:,i] = numpy.cumsum(thispool[:,i], dtype=numpy.uint16)
+            pool.append(thispool)
+        elif c==b'LACS':
+            scal.append(numpy.fromstring(file.read(l-8), '<f').reshape(-1,2))
+        else:
+            file.seek(l-8, 1)
+    print("%6.3f time in GEOD atom" % (time.time()-clock))
+
+    [altdem,ndem]=load_altitude_matrix(lat,lon,dem_alternative)
+    # Rescale pools
+    clock=time.time()
+    for i in range(len(pool)):				# number of pools
+        curpool = pool[i]
+        curscale= scal[i]
+        newpool = numpy.empty(curpool.shape, float)		# need double precision for placements
+        for plane in range(len(curscale)):		# number of planes in this pool
+            (scale,offset) = curscale[plane]
+            if scale:
+                newpool[:,plane] = curpool[:,plane] * (scale/0xffff) + float(offset)
+            else:
+                newpool[:,plane] = curpool[:,plane] + float(offset)
+        # numpy doesn't work efficiently skipping around the variable sized pools, so don't consolidate
+        pool[i] = newpool
+    while po32 and not len(po32[-1]): po32.pop()	# v10 DSFs have a bogus zero-dimensioned pool at the end
+    while pool and not len(pool[-1]): pool.pop()	# v10 DSFs have a bogus zero-dimensioned pool at the end
+
+
+    for i in range(len(pool)):
+        if len(scal[i])>=3: pool[i][:,2]=altitude_vec(pool[i][:,0]-lon,pool[i][:,1]-lat,altdem,ndem)
+
+    print("%6.3f time in rescale" % (time.time()-clock))
+
+    # X-Plane 10 raster data
+    raster={}
+    elev=elevwidth=elevheight=None
+    if b'SMED' in table:
+        clock=time.time()
+        file.seek(table[b'SMED'])
+        (l,)=struct.unpack('<I', file.read(4))
+        demsend=file.tell()+l-8
+        ####
+        layerno=0
+        while file.tell()<demsend:
+            file.read(4)
+            (l1,)=struct.unpack('<I', file.read(4))
+            (ver,bpp,flags,width,height,scale,offset)=struct.unpack('<BBHIIff', file.read(20))
+            print ('IMED', ver, bpp, flags, width, height, scale, offset, rasternames[layerno])
+            file.read(4)
+            (l2,)=struct.unpack('<I', file.read(4))
+            assert l2==8+bpp*width*height
+            if flags&3==0:	# float
+                fmt='f'
+                assert bpp==4
+            else:		# signed
+                if bpp==1:
+                    fmt='b'
+                elif bpp==2:
+                    fmt='h'
+                elif bpp==4:
+                    fmt='i'
+                if flags&3==2:	# unsigned
+                    fmt=fmt.upper()
+            data = numpy.fromstring(file.read(bpp*width*height), '<'+fmt).reshape(width,height)
+            layerno+=1
+        print("%6.3f time in DEMS atom" % (time.time()-clock))
+    # Commands Atom
+    clock=time.time()	# Processor time
+    file.seek(table[b'SDMC'])
+    (l,)=struct.unpack('<I', file.read(4))
+    cmdsend=file.tell()+l-8
+    curpool=0
+    netbase=0
+    idx=0
+    near=0
+    far=-1
+    flags=0	# 1=physical, 2=overlay
+    curter='terrain_Water'
+    tri_list=[]
+    ter_list=[]
+    tri_list_kept={}
+    for ter in terrain:
+        for flags in [1,2]:
+            tri_list_kept[ter+'_'+str(flags)]=[]
+    hole_seeds=[]
+    stripindices = MakeStripIndices()
+    fanindices   = MakeFanIndices()
+    while file.tell()<cmdsend:
+        bcmd=file.read(1)
+        (c,)=struct.unpack('<B', bcmd)
+        if c==10:	# Network Chain Range
+            file.read(4)
+        elif c==9:	# Network Chain
+            bl=file.read(1)
+            (l,)=struct.unpack('<B', bl)
+            file.read(l*2)
+        elif c==11:	# Network Chain 32
+            bl=file.read(1)
+            (l,)=struct.unpack('<B', bl)
+            file.read(l*4)
+        elif c==13:	# Polygon Range
+            file.read(6)
+        elif c==15:	# Nested Polygon Range
+            bpn=file.read(3)
+            (param,n)=struct.unpack('<HB', bpn)
+            file.read(2*n+2)
+        elif c==27:	# Patch Triangle Strip - cross-pool
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*4), '<H').reshape(-1,2)[stripindices[l]]
+            tri_list_loc=numpy.array([pool[p][d] for (p,d) in array_in])
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+        elif c==28:	# Patch Triangle Strip Range
+            (first,last)=struct.unpack('<HH', file.read(4))
+            loc_keep_list=numpy.arange(first,last,dtype=numpy.uint16)[stripindices[last-first]]
+            tri_list_loc=pool[curpool][loc_keep_list]
+            for j in range(last-first-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    loc_keep_list[3*j:3*j+3]=65535
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+        elif c==1:	# Coordinate Pool Select
+            bcp=file.read(2)
+            (curpool,)=struct.unpack('<H', bcp)
+        elif c==2:	# Junction Offset Select
+            file.read(4)
+        elif c==3:	# Set Definition
+            bidx=file.read(1)
+            (idx,)=struct.unpack('<B', bidx)
+        elif c==4:	# Set Definition
+            bidx=file.read(2)
+            (idx,)=struct.unpack('<H', bidx)
+        elif c==5:	# Set Definition
+            bidx=file.read(4)
+            (idx,)=struct.unpack('<I', bidx)
+        elif c==6:	# Set Road Subtype
+            file.read(1)
+        elif c==7:	# Object
+            file.read(2)
+        elif c==8:	# Object Range
+            file.read(4)
+        elif c==12:	# Polygon
+            bpl=file.read(3)
+            (param,l)=struct.unpack('<HB', bpl)
+            file.read(l*2)
+        elif c==14:	# Nested Polygon
+            bpn=file.read(3)
+            (param,n)=struct.unpack('<HB', bpn)
+            for i in range(n):
+                bl=file.read(1)
+                (l,)=struct.unpack('<B', bl)
+                file.read(l*2)
+        elif c==16:	# Terrain Patch
+            curter=terrain[idx]
+        elif c==17:	# Terrain Patch w/ flags
+            bf=file.read(1)
+            (flags,)=struct.unpack('<B', bf)
+            curter=terrain[idx]
+        elif c==18:	# Terrain Patch w/ flags & LOD
+            bf=file.read(9)
+            (flags,near,far)=struct.unpack('<Bff', bf)
+            curter=terrain[idx]
+        elif c==23:	# Patch Triangle
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*2), '<H')
+            tri_list_loc=pool[curpool][array_in]
+            for j in range(l//3):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+        elif c==24:	# Patch Triangle - cross-pool
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*4), '<H')
+            tri_list_loc=numpy.array([pool[p][d] for (p,d) in array_in.reshape(-1,2)])
+            for j in range(l//3):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+        elif c==25:	# Patch Triangle Range
+            (first,last)=struct.unpack('<HH', file.read(4))
+            tri_list_loc=pool[curpool][first:last]
+            l=(last-first)
+            for j in range(l//3):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+        elif c==26:	# Patch Triangle Strip
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*2), '<H')[stripindices[l]]
+            tri_list_loc=pool[curpool][array_in]
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                    if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+        elif c==29:	# Patch Triangle Fan
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*2), '<H')[fanindices[l]]
+            tri_list_loc=pool[curpool][array_in]
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+        elif c==30:	# Patch Triangle Fan - cross-pool
+            print("triangle fan cross-pool!!!!!!!!!!!!!!!!!!!!!")
+            (l,)=struct.unpack('<B', file.read(1))
+            bstring_in=file.read(l*4)
+            tri_list_loc=numpy.array([pool[p][d] for (p,d) in numpy.fromstring(bstring_in,'<H').reshape(-1,2)])[fanindices[l]]
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+                    # TODO FIX !!!
+        elif c==31:	# Patch Triangle Fan Range
+            print("triangle fan range!!!!!!!!!!!!!!!!!!!!!")
+            (first,last)=struct.unpack('<HH', file.read(4))
+            tri_list_loc=pool[curpool][first:][fanindices[last-first]]
+            for j in range(last-first-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter+'_'+str(flags)].append(tri_list_loc[3*j:3*j+3])
+                    # TODO FIX !!!
+        elif c==32:	# Comment
+            bl=file.read(1)
+            (l,)=struct.unpack('<B', bl)
+            file.read(l)
+        elif c==33:	# Comment
+            bl=file.read(2)
+            (l,)=struct.unpack('<H', bl)
+            file.read(l)
+        elif c==34:	# Comment
+            bl=file.read(4)
+            (l,)=struct.unpack('<I', bl)
+            file.read(l)
+        else:
+            print("Unrecognised command (%d) at %x" % (c, file.tell()-1))
+
+    file.close()
+    terrain_im.save(build_dir+dir_sep+'terrain_map_'+strlat+strlon+'.png')
+    if mult_draw: terrain_im_mult.save(build_dir+dir_sep+'terrain_map_mult_'+strlat+strlon+'.png')
+
+    pool_rows=pool_cols=16
+    pool_nbr  = pool_rows*pool_cols
+    pools_params=numpy.zeros((2*pool_nbr,18),'float32')
+    pools_planes=numpy.zeros(2*pool_nbr,'uint32')
+    pools_planes[0:pool_nbr]=5
+    pools_planes[pool_nbr:2*pool_nbr]=7
+    pools_lengths=numpy.zeros((2*pool_nbr),'uint32')
+    pools=numpy.zeros((2*pool_nbr,9*pools_max_points),'uint16')
+    pools_z_temp=numpy.zeros((2*pool_nbr,pools_max_points),'float32')
+    pools_z_max=-9999*numpy.ones(2*pool_nbr,'float32')
+    pools_z_min=9999*numpy.ones(2*pool_nbr,'float32')
+    dico_new_pt={}
+    len_dico_new_pt=0
+    total_cross_pool=0
+    textures={}
+    for ter in terrain:
+        for i in [1,2]:
+            textures[ter+'_'+str(i)]=collections.defaultdict(list)
+
+    print("Elapsed time :",time.time()-timer)
+    #return (tri_list,ter_list,tri_list_kept,hole_seeds)
+
+    dico_textures={}
+    for pool_y in range(0,pool_rows):
+        for pool_x in range(0,pool_cols):
+            pool_idx=(pool_y)*pool_cols+(pool_x)
+            pools_params[pool_idx,0]=1/pool_cols
+            pools_params[pool_idx,1]=lon+pool_x/pool_cols # lon
+            pools_params[pool_idx,2]=1/pool_rows
+            pools_params[pool_idx,3]=lat+pool_y/pool_rows # lat
+            pools_params[pool_idx,4]=0
+            pools_params[pool_idx,5]=0             # z (temp)
+            pools_params[pool_idx,6]=2
+            pools_params[pool_idx,7]=-1            # u
+            pools_params[pool_idx,8]=2
+            pools_params[pool_idx,9]=-1            # v
+            pools_params[pool_idx,10]=1
+            pools_params[pool_idx,11]=0            # s
+            pools_params[pool_idx,12]=1
+            pools_params[pool_idx,13]=0            # t
+            pools_params[pool_idx,14]=1
+            pools_params[pool_idx,15]=0            # bs
+            pools_params[pool_idx,16]=1
+            pools_params[pool_idx,17]=0            # bt
+    pools_params[pool_nbr:2*pool_nbr]=pools_params[0:pool_nbr]
+
+    for key in tri_list_kept:
+        continue
+        print(key)
+        for tri in tri_list_kept[key]:
+            tri_p=[]
+            for i in [0,1,2]:
+                [lonp,latp]=tri[i][:2]
+                [pool_idx,pool_nx,pool_ny]=point_params(latp,lonp,lat,lon,pools_params,pool_cols,pool_rows)
+                key2=key+'_'+str(pool_idx)+'_'+str(pool_nx)+'_'+str(pool_ny)
+                if key2 in dico_new_pt:
+                    [pool_idx,pos_in_pool]=dico_new_pt[key2]
+                else:
+                    len_dico_new_pt+=1
+                    if key[-1]=='2': pool_idx+=pool_nbr
+                    pos_in_pool=pools_lengths[pool_idx]
+                    dico_new_pt[key2]=[pool_idx,pos_in_pool]
+                    pools_lengths[pool_idx]+=1
+                tri_p+=[pool_idx,pos_in_pool]
+            if tri_p[0]==tri_p[2] and tri_p[2]==tri_p[4]:
+                pool_idx=tri_p[0]
+                textures[key][pool_idx]+=[tri_p[1],tri_p[3],tri_p[5]]
+            else:
+                total_cross_pool+=1
+                pool_idx='cross-pool'
+                textures[key][pool_idx]+=tri_p
+
+    total_pt=0
+    for pool_idx in range(pool_nbr*2):
+        total_pt+=pools_lengths[pool_idx]
+    print("total_pt = ",total_pt)
+    print("Elapsed time :",time.time()-timer)
+    return (tri_list,ter_list,tri_list_kept,hole_seeds,textures)
+##############################################################################
+
+##############################################################################
+#
+# The following is essentially taken with minor modifications from Jonathan
+# Harris (Marginal) DSFLib.py
+#
+def read_and_split_dsf_mesh(lat,lon,build_dir,file_to_sniff,poly_list,bbox_list,dem_alternative=''):
+    skipnetworks=True
+    terrain_im=Image.new("L",(raster_resolution,raster_resolution))
+    terrain_draw=ImageDraw.Draw(terrain_im)
+    timer=time.time()
+    strlat='{:+.0f}'.format(lat).zfill(3)
+    strlon='{:+.0f}'.format(lon).zfill(4)
+    strlatround='{:+.0f}'.format(floor(lat/10)*10).zfill(3)
+    strlonround='{:+.0f}'.format(floor(lon/10)*10).zfill(4)
+    file_to_sniff_loc=Ortho4XP_dir+dir_sep+"tmp"+dir_sep+strlat+strlon+'.dsf'
+    # Making a copy of the original DSF in tmp dir
+    os.system(copy_cmd + '  "'+file_to_sniff+'" "'+file_to_sniff_loc+'"')
+    file = open(file_to_sniff_loc,'rb')
+    # check for 7z compression and unzip if necessary
+    dsfid = file.read(2).decode('ascii')
+    if dsfid == '7z':
+        file.close()
+        os.system(rename_cmd+'"'+file_to_sniff_loc+'" "'+file_to_sniff_loc+'.7z" '+\
+              devnull_rdir)
+        os.system(unzip_cmd+' e -o'+Ortho4XP_dir+dir_sep+'tmp'+' "'+\
+              file_to_sniff_loc+'.7z"')
+        file = open(file_to_sniff_loc,'rb')
+    #########
+    fout=open(build_dir+dir_sep+"TOP.atm","wb")
+    fout.write(file.read(12))
+    fout.close()
+    #########
+    # read atoms headers and save their positions
+    table={}
+    file.seek(-16,os.SEEK_END)
+    end=file.tell()
+    p=12
+    while p<end:
+        file.seek(p)
+        d=file.read(8)
+        (c,l)=struct.unpack('<4sI', d)
+        table[c]=p+4
+        p+=l
+    # Header Atom
+    file.seek(table[b'DAEH'])
+    (l,)=struct.unpack('<I', file.read(4))
+    headend=file.tell()+l-8
+    file.read(4)
+    (l,)=struct.unpack('<I', file.read(4))
+    ####
+    fout=open(build_dir+dir_sep+"PROP.atm","wb")
+    fout.write(file.read(l-8))
+    fout.close()
+    file.seek(file.tell()-l+8)
+    ####
+    c=file.read(l-9).split(b'\0')
+    file.read(1)
+    overlay=0
+    for i in range(0, len(c)-1, 2):
+        if c[i]==b'sim/overlay': overlay=int(c[i+1])
+        elif c[i]==b'sim/west': west=int(c[i+1])
+    file.seek(headend)
+
+    # Definitions Atom
+    file.seek(table[b'NFED'])
+    (l,)=struct.unpack('<I', file.read(4))
+    defnend=file.tell()+l-8
+    terrain=objects=polygons=networks=rasternames=[]
+    while file.tell()<defnend:
+        c=file.read(4)
+        (l,)=struct.unpack('<I', file.read(4))
+        if l==8:
+            pass	# empty
+        elif c==b'TRET':
+            fout=open(build_dir+dir_sep+"TERT.atm","wb")
+            fout.write(file.read(l-8))
+            fout.close
+            file.seek(file.tell()-l+8)
+            terrain=file.read(l-9).split(b'\0')
+            #print("terrain length : ",len(terrain))
+            file.read(1)
+        elif c==b'TJBO':
+            fout=open(build_dir+dir_sep+"OBJT.atm","wb")
+            fout.write(file.read(l-8))
+            fout.close
+            file.seek(file.tell()-l+8)
+            objects=[x.decode() for x in file.read(l-9).split(b'\0')]	# X-Plane only supports ASCII
+            file.read(1)
+        elif c==b'YLOP':
+            fout=open(build_dir+dir_sep+"POLY.atm","wb")
+            fout.write(file.read(l-8))
+            fout.close
+            file.seek(file.tell()-l+8)
+            polygons=[x.decode() for x in file.read(l-9).split(b'\0')]	# X-Plane only supports ASCII
+            file.read(1)
+        elif c==b'WTEN':
+            fout=open(build_dir+dir_sep+"NETW.atm","wb")
+            fout.write(file.read(l-8))
+            fout.close
+            file.seek(file.tell()-l+8)
+            networks=file.read(l-9).split(b'\0')
+            file.read(1)
+        elif c==b'NMED':
+            fout=open(build_dir+dir_sep+"DEMN.atm","wb")
+            fout.write(file.read(l-8))
+            fout.close
+            file.seek(file.tell()-l+8)
+            rasternames=file.read(l-9).split(b'\0')
+            file.read(1)
+        else:
+            file.seek(l-8, 1)
+
+    if len(terrain)>256:
+        terrain_im_mult=Image.new("L",(raster_resolution,raster_resolution))
+        terrain_draw_mult=ImageDraw.Draw(terrain_im_mult)
+        mult_draw=True
+        #print(terrain)
+    else:
+        mult_draw=False
+    # Geodata Atom
+    clock=time.time()	# Processor time
+    file.seek(table[b'DOEG'])
+    (l,)=struct.unpack('<I', file.read(4))
+    geodend=file.tell()+l-8
+    ####
+    fout=open(build_dir+dir_sep+"GEOD.atm","wb")
+    #fout.write(file.read(l-8))
+    #file.seek(table[b'DOEG']+4)
+    pool=[]
+    scal=[]
+    po32=[]
+    sc32=[]
+    nbr_of_pools=0
+    while file.tell()<geodend:
+        c=file.read(4)
+        (l,)=struct.unpack('<I', file.read(4))
+        if c == b'23OP':
+            if l>8:
+                file.seek(file.tell()-8)
+                fout.write(file.read(l))
+        elif c == b'23CS':
+            if l>8:
+                file.seek(file.tell()-8)
+                fout.write(file.read(l))
+        elif c == b'LOOP':
+            nbr_of_pools+=1
+            (n,p)=struct.unpack('<IB', file.read(5))
+            thispool = numpy.empty((n,p), numpy.uint16)
+            # Pool data is supplied in column order (by "plane"), so use numpy slicing to assign
+            for i in range(p):
+                (e,)=struct.unpack('<B', file.read(1))	# encoding type - default DSFs use e=3
+                if e&2:		# RLE
+                    offset = 0
+                    while offset<n:
+                        (r,)=struct.unpack('<B', file.read(1))
+                        if (r&128):	# repeat
+                            (d,)=struct.unpack('<H', file.read(2))
+                            thispool[offset:offset+(r&127),i] = d
+                            offset += (r&127)
+                        else:		# non-repeat
+                            thispool[offset:offset+r,i] = numpy.fromstring(file.read(r*2), '<H')
+                            offset += r
+                else:		# raw
+                    thispool[:,i] = numpy.fromstring(file.read(n*2), '<H')
+                if e&1:		# differenced
+                    thispool[:,i] = numpy.cumsum(thispool[:,i], dtype=numpy.uint16)
+            pool.append(thispool)
+        elif c==b'LACS':
+            scal.append(numpy.fromstring(file.read(l-8), '<f').reshape(-1,2))
+        else:
+            file.seek(l-8, 1)
+
+    while pool and not len(pool[-1]):
+        pool.pop()
+        scal.pop()
+        nbr_of_pools-=1
+    assert len(pool)==len(scal)
+
+
+    # Rescale pools
+    poolresc=[]
+    for i in range(len(pool)):				# number of pools
+        curpool = pool[i]
+        curscale= scal[i]
+        newpool = numpy.empty(curpool.shape, float)		# need double precision for placements
+        for plane in range(len(curscale)):		# number of planes in this pool
+            (scale,offset) = curscale[plane]
+            if scale:
+                newpool[:,plane] = curpool[:,plane] * (scale/0xffff) + float(offset)
+            else:
+                newpool[:,plane] = curpool[:,plane] + float(offset)
+        # numpy doesn't work efficiently skipping around the variable sized pools, so don't consolidate
+        poolresc.append(newpool)
+
+    # Recover altitudes from DEM either than using -32768
+    [altdem,ndem]=load_altitude_matrix(lat,lon,dem_alternative)
+    for i in range(len(poolresc)):
+        if len(scal[i])>=3: poolresc[i][:,2]=altitude_vec(poolresc[i][:,0]-lon,poolresc[i][:,1]-lat,altdem,ndem)
+
+    # Now we update the z planes of the pools
+    for i in range(len(pool)):
+        if len(scal[i])<3: continue
+        altmax=poolresc[i][:,2].max()
+        altmin=poolresc[i][:,2].min()
+        if altmax-altmin < 770:
+            scale=771   # 65535= 771*85
+        elif altmax-altmin < 1284:
+            scale=1285 # 66535=1285*51
+        elif altmax-altmin < 4368:
+            scale=4369 # 65535=4369*15
+        else:
+            scale=13107
+        scale=4369
+        offset=floor(altmin)
+        scal[i][2]=(scale,offset)
+        pool[i][:,2]=((poolresc[i][:,2]-offset)*(65535/scale)).round().astype(numpy.uint16)
+
+    # Finally we encode the pools and scals in fout
+    for i in range(len(pool)):
+        fout.write(b'LOOP')
+        #fout.write(longeur de l'atom)
+        (n,p)=pool[i].shape
+        fout.write(struct.pack('<I',8+5+p*(1+2*n)))
+        fout.write(struct.pack('<IB',n,p))
+        for j in range(p):
+            fout.write(struct.pack('<B',0))
+            fout.write(pool[i][:,j].tostring())
+    for i in range(len(scal)):
+        (n,p)=pool[i].shape
+        fout.write(b'LACS')
+        fout.write(struct.pack('<I',8+8*p))
+        fout.write(scal[i].flatten().astype(numpy.float32).tostring())
+
+
+    fout.write(struct.pack('<I',nbr_of_pools))  # BE CAREFUL : we had the number of pools after the atom
+    fout.close()
+
+    # We rename poolresc as pool
+    pool=poolresc
+
+
+    print("%6.3f time in GEOD atom" % (time.time()-clock))
+
+    # X-Plane 10 raster data
+    raster={}
+    elev=elevwidth=elevheight=None
+    if b'SMED' in table:
+        clock=time.time()
+        file.seek(table[b'SMED'])
+        (l,)=struct.unpack('<I', file.read(4))
+        demsend=file.tell()+l-8
+        ####
+        fout=open(build_dir+dir_sep+"DEMS.atm","wb")
+        if dem_alternative == '':
+            fout.write(file.read(l-8))
+        else:
+            layerno=0
+            while file.tell()<demsend:
+                if rasternames[layerno]!=b'elevation':
+                    fout.write(file.read(28))
+                    file.read(4)
+                    (l,)=struct.unpack('<I', file.read(4))
+                    file.seek(file.tell()-8)
+                    fout.write(file.read(l))
+                else:
+                    fout.write(file.read(4))
+                    (l1,)=struct.unpack('<I', file.read(4))
+                    (ver,bpp,flags,width,height,scale,offset)=struct.unpack('<BBHIIff', file.read(20))
+                    print ('IMED', ver, bpp, flags, width, height, scale, offset, rasternames[layerno])
+                    file.read(4)
+                    (l2,)=struct.unpack('<I', file.read(4))
+                    assert l2==8+bpp*width*height
+                    if flags&3==0:	# float
+                        fmt='f'
+                        assert bpp==4
+                    else:		# signed
+                        if bpp==1:
+                            fmt='b'
+                        elif bpp==2:
+                            fmt='h'
+                        elif bpp==4:
+                            fmt='i'
+                        if flags&3==2:	# unsigned
+                            fmt=fmt.upper()
+                    data = numpy.fromstring(file.read(bpp*width*height), '<'+fmt).reshape(width,height)
+                    [data_alternative,ndem] = load_altitude_matrix(lat,lon,filename=dem_alternative)
+                    data_alternative=data_alternative[::-1].astype(numpy.uint16)
+                    fout.write(struct.pack('<I',l1))
+                    fout.write(struct.pack('<BBHIIff', ver,bpp,flags,width,height,scale,offset))
+                    fout.write(b"DMED")
+                    fout.write(struct.pack('<I',l2))
+                    fout.write(data_alternative.tobytes())
+                layerno+=1
+        fout.close()
+        print("%6.3f time in DEMS atom" % (time.time()-clock))
+    # Commands Atom
+    clock=time.time()	# Processor time
+    file.seek(table[b'SDMC'])
+    (l,)=struct.unpack('<I', file.read(4))
+    cmdsend=file.tell()+l-8
+    curpool=0
+    netbase=0
+    idx=0
+    near=0
+    far=-1
+    flags=0	# 1=physical, 2=overlay
+    curter='terrain_Water'
+    tri_list=[]
+    ter_list=[]
+    tri_list_kept={}
+    for ter in terrain:
+        tri_list_kept[ter]=[]
+    hole_seeds=[]
+    stripindices = MakeStripIndices()
+    fanindices   = MakeFanIndices()
+    fout=open(build_dir+dir_sep+'CMDS.atm','wb')
+    print(poly_list)
+    print(bbox_list)
+    time.sleep(3)
+    while file.tell()<cmdsend:
+        bcmd=file.read(1)
+        (c,)=struct.unpack('<B', bcmd)
+        print(c)
+        if c==10:	# Network Chain Range
+            fout.write(bcmd+file.read(4))
+        elif c==9:	# Network Chain
+            bl=file.read(1)
+            (l,)=struct.unpack('<B', bl)
+            fout.write(bcmd+bl+file.read(l*2))
+        elif c==11:	# Network Chain 32
+            bl=file.read(1)
+            (l,)=struct.unpack('<B', bl)
+            fout.write(bcmd+bl+file.read(l*4))
+        elif c==13:	# Polygon Range
+            fout.write(bcmd+file.read(6))
+        elif c==15:	# Nested Polygon Range
+            bpn=file.read(3)
+            (param,n)=struct.unpack('<HB', bpn)
+            fout.write(bcmd+bpn+file.read(2*n+2))
+        elif c==27:	# Patch Triangle Strip - cross-pool
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*4), '<H').reshape(-1,2)[stripindices[l]]
+            tri_list_loc=numpy.array([pool[p][d] for (p,d) in array_in])
+            loc_keep_list=numpy.zeros(3*(l-2),dtype=numpy.bool)
+            loc_keep_nbr=0
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        #print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                        #print(c,idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    loc_keep_list[3*j:3*j+3]=True
+                    loc_keep_nbr+=1
+            if loc_keep_nbr>0:
+                array_out=array_in[loc_keep_list==True].reshape(1,-1)
+                fout.write(struct.pack('<B',24)+struct.pack('<B',3*loc_keep_nbr)+array_out.tostring())
+        elif c==28:	# Patch Triangle Strip Range
+            (first,last)=struct.unpack('<HH', file.read(4))
+            loc_keep_list=numpy.arange(first,last,dtype=numpy.uint16)[stripindices[last-first]]
+            loc_keep_nbr=0
+            tri_list_loc=pool[curpool][loc_keep_list]
+            for j in range(last-first-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        #print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    loc_keep_list[3*j:3*j+3]=65535
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                        #print(c,idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    loc_keep_nbr+=1
+            if loc_keep_nbr>0:
+                array_out=loc_keep_list[loc_keep_list!=65535]
+                fout.write(struct.pack('<B',23)+struct.pack('<B',3*loc_keep_nbr)+array_out.tostring())
+        elif c==1:	# Coordinate Pool Select
+            bcp=file.read(2)
+            (curpool,)=struct.unpack('<H', bcp)
+            fout.write(bcmd+bcp)
+        elif c==2:	# Junction Offset Select
+            fout.write(bcmd+file.read(4))
+        elif c==3:	# Set Definition
+            bidx=file.read(1)
+            (idx,)=struct.unpack('<B', bidx)
+            fout.write(bcmd+bidx)
+        elif c==4:	# Set Definition
+            bidx=file.read(2)
+            (idx,)=struct.unpack('<H', bidx)
+            fout.write(bcmd+bidx)
+        elif c==5:	# Set Definition
+            bidx=file.read(4)
+            (idx,)=struct.unpack('<I', bidx)
+            fout.write(bcmd+bidx)
+        elif c==6:	# Set Road Subtype
+            fout.write(bcmd+file.read(1))
+        elif c==7:	# Object
+            fout.write(bcmd+file.read(2))
+        elif c==8:	# Object Range
+            fout.write(bcmd+file.read(4))
+        elif c==12:	# Polygon
+            bpl=file.read(3)
+            (param,l)=struct.unpack('<HB', bpl)
+            fout.write(bcmd+bpl+file.read(l*2))
+        elif c==14:	# Nested Polygon
+            bpn=file.read(3)
+            (param,n)=struct.unpack('<HB', bpn)
+            btmp=b''
+            for i in range(n):
+                bl=file.read(1)
+                (l,)=struct.unpack('<B', bl)
+                btmp+=bl+file.read(l*2)
+            fout.write(bcmd+bpn+btmp)
+        elif c==16:	# Terrain Patch
+            curter=terrain[idx]
+            fout.write(bcmd)
+        elif c==17:	# Terrain Patch w/ flags
+            bf=file.read(1)
+            (flags,)=struct.unpack('<B', bf)
+            curter=terrain[idx]
+            fout.write(bcmd+bf)
+        elif c==18:	# Terrain Patch w/ flags & LOD
+            bf=file.read(9)
+            (flags,near,far)=struct.unpack('<Bff', bf)
+            curter=terrain[idx]
+            fout.write(bcmd+bf)
+        elif c==23:	# Patch Triangle
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*2), '<H')
+            tri_list_loc=pool[curpool][array_in]
+            loc_keep_list=numpy.zeros(l,dtype=numpy.bool)
+            loc_keep_nbr=0
+            for j in range(l//3):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        #print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                        #print(c,idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    loc_keep_list[3*j:3*j+3]=True
+                    loc_keep_nbr+=1
+            array_out=array_in[loc_keep_list==True]
+            if loc_keep_nbr>0:
+                fout.write(bcmd+struct.pack('<B',3*loc_keep_nbr)+array_out.tostring())
+        elif c==24:	# Patch Triangle - cross-pool
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*4), '<H')
+            tri_list_loc=numpy.array([pool[p][d] for (p,d) in array_in.reshape(-1,2)])
+            loc_keep_list=numpy.zeros(l*2,dtype=numpy.bool)
+            loc_keep_nbr=0
+            for j in range(l//3):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        #print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    loc_keep_list[6*j:6*j+6]=True
+                    loc_keep_nbr+=1
+            array_out=array_in[loc_keep_list==True]
+            if loc_keep_nbr>0:
+                fout.write(bcmd+struct.pack('<B',3*loc_keep_nbr)+array_out.tostring())
+        elif c==25:	# Patch Triangle Range
+            (first,last)=struct.unpack('<HH', file.read(4))
+            tri_list_loc=pool[curpool][first:last]
+            loc_keep_nbr=0
+            loc_keep_list=numpy.arange(first,last,dtype=numpy.uint16)
+            l=(last-first)
+            for j in range(l//3):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        #print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    loc_keep_list[3*j:3*j+3]=65535 # slightly dangerous...
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    loc_keep_nbr+=1
+            if loc_keep_nbr>0:
+                array_out=loc_keep_list[loc_keep_list!=65535]
+                fout.write(struct.pack('<B',23)+struct.pack('<B',3*loc_keep_nbr)+array_out.tostring())
+        elif c==26:	# Patch Triangle Strip
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*2), '<H')[stripindices[l]]
+            tri_list_loc=pool[curpool][array_in]
+            loc_keep_list=numpy.zeros(3*(l-2),dtype=numpy.bool)
+            loc_keep_nbr=0
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        #print(c,idx)
+                    terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                    if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                        #print(c,idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    loc_keep_list[3*j:3*j+3]=True
+                    loc_keep_nbr+=1
+            if loc_keep_nbr>0:
+                array_out=array_in[loc_keep_list==True]
+                fout.write(struct.pack('<B',23)+struct.pack('<B',3*loc_keep_nbr)+array_out.tostring())
+        elif c==29:	# Patch Triangle Fan
+            (l,)=struct.unpack('<B', file.read(1))
+            array_in=numpy.fromstring(file.read(l*2), '<H')[fanindices[l]]
+            tri_list_loc=pool[curpool][array_in]
+            loc_keep_list=numpy.zeros(3*(l-2),dtype=numpy.bool)
+            loc_keep_nbr=0
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        #print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                        #print(c,idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    loc_keep_list[3*j:3*j+3]=True
+                    loc_keep_nbr+=1
+            if loc_keep_nbr>0:
+                array_out=array_in[loc_keep_list==True]
+                fout.write(struct.pack('<B',23)+struct.pack('<B',3*loc_keep_nbr)+array_out.tostring())
+        elif c==30:	# Patch Triangle Fan - cross-pool
+            print("triangle fan cross-pool!!!!!!!!!!!!!!!!!!!!!")
+            (l,)=struct.unpack('<B', file.read(1))
+            bstring_in=file.read(l*4)
+            bstring_out=b''
+            l_out=0
+            tri_list_loc=numpy.array([pool[p][d] for (p,d) in numpy.fromstring(bstring_in,'<H').reshape(-1,2)])[fanindices[l]]
+            for j in range(l-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                        print(c,idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    # TODO FIX !!!
+        elif c==31:	# Patch Triangle Fan Range
+            print("triangle fan range!!!!!!!!!!!!!!!!!!!!!")
+            (first,last)=struct.unpack('<HH', file.read(4))
+            bstring_out=b''
+            l_out=0
+            tri_list_loc=pool[curpool][first:][fanindices[last-first]]
+            for j in range(last-first-2):
+                poly_tri=tri_list_loc[3*j:3*j+3][:,1::-1].reshape(6)
+                #poly_tri=numpy.concatenate((poly_tri,poly_tri[:2]))
+                keep_tri=True
+                rough_test_passed=True
+                for bbox in bbox_list:
+                    if in_bbox(poly_tri[0:2],bbox):
+                        rough_test_passed=False
+                        break
+                if not rough_test_passed:
+                    if flags&1:
+                        px1=int((poly_tri[1]-lon)*raster_resolution)
+                        px2=int((poly_tri[3]-lon)*raster_resolution)
+                        px3=int((poly_tri[5]-lon)*raster_resolution)
+                        py1=int((lat+1-poly_tri[0])*raster_resolution)
+                        py2=int((lat+1-poly_tri[2])*raster_resolution)
+                        py3=int((lat+1-poly_tri[4])*raster_resolution)
+                        terrain_draw.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx%256)
+                        if mult_draw: terrain_draw_mult.polygon([(px1,py1),(px2,py2),(px3,py3)],fill=idx//256)
+                        print(c,idx)
+                    for poly_test in poly_list:
+                        if do_overlap(poly_tri,poly_test):
+                            keep_tri=False
+                            break
+                    if keep_tri:
+                        hole_seeds.append([(poly_tri[0]+poly_tri[2]+poly_tri[4])/3,\
+                                (poly_tri[1]+poly_tri[3]+poly_tri[5])/3])
+                if not keep_tri:
+                    if flags&1:
+                        tri_list.append(tri_list_loc[3*j:3*j+3])
+                        ter_list.append(idx)
+                        print(c,idx)
+                else:
+                    tri_list_kept[curter].append(tri_list_loc[3*j:3*j+3])
+                    # TODO FIX !!!
+        elif c==32:	# Comment
+            bl=file.read(1)
+            (l,)=struct.unpack('<B', bl)
+            fout.write(bmcd+bl+file.read(l))
+        elif c==33:	# Comment
+            bl=file.read(2)
+            (l,)=struct.unpack('<H', bl)
+            fout.write(bmcd+bl+file.read(l))
+        elif c==34:	# Comment
+            bl=file.read(4)
+            (l,)=struct.unpack('<I', bl)
+            fout.write(bmcd+bl+file.read(l))
+        else:
+            print("Unrecognised command (%d) at %x" % (c, file.tell()-1))
+    print("%6.3f time in CMDS atom" % (time.time()-clock))
+    file.close()
+    fout.close()
+    terrain_im.save(build_dir+dir_sep+'terrain_map_'+strlat+strlon+'.png')
+    if mult_draw: terrain_im_mult.save(build_dir+dir_sep+'terrain_map_mult_'+strlat+strlon+'.png')
+    print("Elapsed time :",time.time()-timer)
+    return (tri_list,ter_list,tri_list_kept,hole_seeds)
+##############################################################################
+
+##############################################################################
+# Indices for making n-2 triangles out of n vertices of a tri strip
+class MakeStripIndices(dict):
+    def __missing__(self, n):
+        a = numpy.concatenate([i%2 and [i, i+2, i+1] or [i, i+1, i+2] for i in range(n-2)])
+        assert len(a) == 3*(n-2), a
+        self[n] = a
+        return a
+##############################################################################
+
+##############################################################################
+# Indices for making n-2 triangles out of n vertices of a tri fan
+class MakeFanIndices(dict):
+    def __missing__(self, n):
+        a = zeros(3*(n-2), int)
+        a[1:n*3:3] += numpy.arange(1,n-1)
+        a[2:n*3:3] += numpy.arange(2,n)
+        assert len(a) == 3*(n-2), a
+        self[n] = a
+        return a
+##############################################################################
 
 ##############################################################################
 #                                                                            #
@@ -6250,7 +8318,7 @@ if __name__ == '__main__':
         os.system(delete_cmd+" "+Ortho4XP_dir+dir_sep+"tmp"+dir_sep+"*.jpg "+devnull_rdir)
         os.system(delete_cmd+" "+Ortho4XP_dir+dir_sep+"tmp"+dir_sep+"*.png "+devnull_rdir)
         application = Ortho4XP_Graphical()
-        application.mainloop()	
+        application.mainloop()
         application.quit()
         sys.exit()
     # sequel is only concerned with command line (AND PERHAPS NOT UP TO DATE !!!)
@@ -6299,7 +8367,6 @@ if __name__ == '__main__':
                                dir_sep+'Data'+strcloselat+strcloselon+".mesh"
                 if os.path.isfile(closemesh_filename):
                     mesh_filename_list.append(closemesh_filename)
-    # [Thanks to Simheaven] fix for missing folder textures
     build_dir=Ortho4XP_dir+dir_sep+'Tiles'+dir_sep+'zOrtho4XP_'+strlat+strlon
     if not os.path.exists(build_dir+dir_sep+"textures"):
         os.makedirs(build_dir+dir_sep+"textures")

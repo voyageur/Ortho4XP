@@ -1,7 +1,7 @@
 ##############################################################################
 #                                                                            #
 #      The address book for Ortho4XP.                                        #
-#      Version from September 5st 2016                                       #
+#      Version from November 8th 2016                                        #
 #                                                                            #
 #      You can expand it with your preferred providers, the following        #
 #      is just a sample one based on prior ideas or queries.                 #
@@ -12,13 +12,14 @@
 try: # pyproj allows to deal with wms which don't accept wgs84 bounds, like 'SE2' below
     import pyproj
     pyproj_loaded=True
-    epsg={} 
+    epsg={}
     epsg['4326']=pyproj.Proj(init='epsg:4326')
     epsg['3006']=pyproj.Proj(init='epsg:3006')
     epsg['32632']=pyproj.Proj(init='epsg:32632')
     epsg['2056']=pyproj.Proj(init='epsg:2056')
     epsg['25832']=pyproj.Proj(init='epsg:25832')
     epsg['102060']=pyproj.Proj(init='epsg:3912')
+    epsg['3301']=pyproj.Proj(init='epsg:3301')
 except:
     print("Pyproj is not present, some providers won't be available.")
     pyproj_loaded=False
@@ -29,16 +30,16 @@ except:
 # You can also remove the codes you don't want to appear in the interface.
 
 # 1) List of websites that use WGS84 TMS standard with 256x256 pixmaps.
-px256_list=['OSM','BI','GO2','Arc','Here','USA_2','FR','FRorth','FRsat','FRsat2','Top25','SP','CH','OST','SE','Hitta','CZ','OTM','AU_1','JP','NZ','ASK_1','ASK_2','F44','FRsatp','FO','g2xpl_8','g2xpl_16']                     
+px256_list=['OSM','BI','GO2','Arc','Here','USA_2','FR','FRorth','FRom','FRsat','FRsat2','Top25','SP','CH','OST','SE','Hitta','CZ','AU_1','JP','NZ','ASK_1','ASK_2','F44','FRsatp','FO','g2xpl_8','g2xpl_16']
 # 2) List of WMS sites accepting 2048x2048 image requests
-wms2048_list=['DE','IT','PL','SLO','CRO','SE2','BE_Wa','NE','NE2','DK','USA_1','GE'] 
+wms2048_list=['DE','IT','PL','SLO','CRO','SE2','BE_Wa','NE','NE2','DK','USA_1','GE','EST']
 
 # If the provider uses a different projection than epsg:4326 indicate it here below
-st_proj_coord_dict={'USA_1':'2056','DE':'25832','SE2':'3006','SLO':'102060','GE':'2056'}
+st_proj_coord_dict={'USA_1':'2056','DE':'25832','SE2':'3006','SLO':'102060','GE':'2056','EST':'3301'}
 
 ##############################################################################
 def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
-    
+
     til_x=til_x_left
     til_y=til_y_top
     user_agent_generic="Mozilla/5.0 (X11; Linux x86_64; rv:38.0) "+\
@@ -55,10 +56,10 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
     # Viewer on www.bing.com/maps
     ####################################################
     if website=="BI":
-        server=random.randint(0,3) # can be quicker with a fixed number between 0 and 3
+        server=3 #random.randint(0,3) # can be quicker with a fixed number between 0 and 3
         url="http://r"+str(server)+".ortho.tiles.virtualearth.net/tiles/a"+\
             gtile_to_quadkey(til_x,til_y,zoomlevel)+".jpeg?g=136"
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
 
     ####################################################
     # Google (restrictive copyright, version as of 2015)
@@ -78,18 +79,18 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Origin':'https://www.google.fr',\
             'Connection':'keep-alive'\
                 }
-    
+
     ####################################################
-    # Here.com (was asked for, similar to Bing in many places it seems) 
+    # Here.com (was asked for, similar to Bing in many places it seems)
     ####################################################
     elif website=="Here":
         server=random.randint(1,4)
         url="https://"+str(server)+".aerial.maps.api.here.com/"+\
-            "maptile/2.1/maptile/2ae1d8fbb0/satellite.day/"+str(zoomlevel)+"/"+\
+            "maptile/2.1/maptile/3356e3cd65/satellite.day/"+str(zoomlevel)+"/"+\
              str(til_x)+"/"+str(til_y)+"/256/jpg?app_id=xWVIueSv6JL0aJ5xqTxb&app_code=djPZyynKsbTjIUDOBcHZ2g"
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
 
-    
+
     ####################################################
     # Arcgis Online
     # Copyright is the one of the underlying provider
@@ -99,9 +100,9 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
         url="http://server.arcgisonline.com/arcgis/rest/"+\
             "services/World_Imagery/MapServer/tile/"+str(zoomlevel)+\
             "/"+str(til_y)+"/"+str(til_x)
-        fake_headers=fake_headers_generic       
-    
-           
+        fake_headers=fake_headers_generic
+
+
     ####################################################
     # Openstreetmap (open data)
     # Viewer on www.openstreetmap.org
@@ -116,7 +117,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             letter='c'
         url="http://"+letter+".tile.openstreetmap.org/"+str(zoomlevel)+"/"+\
             str(til_x)+"/"+str(til_y)+".png"
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
 
 
     ####################################################
@@ -132,28 +133,28 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             "&VERSION=1.1.1&SERVICE=WMS&REQUEST=GetMap&LAYERS=0&STYLES="+\
             "&SRS=EPSG:4326&WIDTH=2048&HEIGHT=2048&BBOX="+\
             str(lonmin)+','+str(latmin)+','+str(lonmax)+','+str(latmax)
-        fake_headers=fake_headers_generic       
-    
+        fake_headers=fake_headers_generic
+
 
     ####################################################
     # The National map (USGS) 1 foot orthoimagery / TMS
     # Permissive copyright
-    # Same as above but filled with some data where 
+    # Same as above but filled with some data where
     # missing (this is actually 'Arc'...)
     ####################################################
     elif website=="USA_2":
        url="http://services.arcgisonline.com/ArcGIS/rest/services/"+\
            "World_Imagery/MapServer/tile/"+str(zoomlevel)+"/"+str(til_y_top)+\
            "/"+str(til_x_left)
-       fake_headers=fake_headers_generic       
-    
+       fake_headers=fake_headers_generic
+
     ####################################################
     # The Alaska Statewide Orthoimagery Mosaic
     # Permissive copyright
     ####################################################
     elif website=="ASK_1":
        url="http://tiles.gina.alaska.edu/tilesrv/bdl/tile/"+str(til_x_left)+"/"+str(til_y_top)+"/"+str(zoomlevel)
-       fake_headers=fake_headers_generic     
+       fake_headers=fake_headers_generic
 
     ####################################################
     # The Alaska Statewide Orthoimagery Mosaic
@@ -161,7 +162,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
     ####################################################
     elif website=="ASK_2":
        url="http://tiles.gina.alaska.edu/tiles/SPOT5.SDMI.ORTHO_RGB/tile/"+str(til_x_left)+"/"+str(til_y_top)+"/"+str(zoomlevel)
-       fake_headers=fake_headers_generic     
+       fake_headers=fake_headers_generic
 
     ####################################################
     # National geographical institute for France
@@ -181,7 +182,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Connection':'keep-alive',\
             'Accept-Encoding':'gzip, deflate',\
             'Referer':'http://tab.geoportail.fr'\
-            }       
+            }
     elif  website=="FRorth":
         url="http://wxs.ign.fr/61fs25ymczag0c67naqvvmap"+\
              "/geoportail/wmts?"+\
@@ -196,7 +197,24 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Connection':'keep-alive',\
             'Accept-Encoding':'gzip, deflate',\
             'Referer':'http://tab.geoportail.fr'\
-            }       
+            }
+
+    elif  website=="FRom":
+        url="http://wxs.ign.fr/an7nvfzojv5wa96dsga5nk8w"+\
+             "/geoportail/wmts?"+\
+            "&SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER="+\
+            "ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&"+\
+            "TILEMATRIXSET=PM&TILEMATRIX="+str(zoomlevel)+"&TILEROW="+\
+            str(til_y)+"&TILECOL="+str(til_x)
+
+        fake_headers={\
+            'User-Agent':user_agent_generic,\
+            'Host':'wxs.ign.fr',\
+            'Accept':'image/png,image/*;q=0.8,*/*;q=0.5',\
+            'Connection':'keep-alive',\
+            'Accept-Encoding':'gzip, deflate, br',\
+            'Referer':'https://www.geoportail.gouv.fr/carte/'\
+            }
 
     ####################################################
     # National geographical institute for France
@@ -219,8 +237,8 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Connection':'keep-alive',\
             'Accept-Encoding':'gzip, deflate',\
             'Referer':'http://geosud.ign.fr/visu.html'\
-            }      
- 
+            }
+
     elif  website=="FRsat2":
         if zoomlevel>=17:
             return 'error'
@@ -237,8 +255,8 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Connection':'keep-alive',\
             'Accept-Encoding':'gzip, deflate',\
             'Referer':'http://geosud.ign.fr/visu.html'\
-            }       
-    
+            }
+
     elif  website=="FRsatp":  # Pleiades 2014, very limited coverage... but for some specific islands
         if zoomlevel>=18:
             return 'error'
@@ -255,7 +273,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Connection':'keep-alive',\
             'Accept-Encoding':'gzip, deflate',\
             'Referer':'http://geosud.ign.fr/visu.html'\
-            }        
+            }
     ####################################################
     # National geographical institute for France
     # Restrictive copyright (should adapt to INSPIRE!)
@@ -277,12 +295,12 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Connection':'keep-alive',\
             'Accept-Encoding':'gzip, deflate',\
             'Referer':'http://geosud.ign.fr/visu.html'\
-            }       
-    
-    
+            }
+
+
     ####################################################
     # German Geo Data Centre - DOP Online
-    # Copyright is the one of the underlying provider 
+    # Copyright is the one of the underlying provider
     ####################################################
     elif website=="DE":
         if not pyproj_loaded:
@@ -318,8 +336,8 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             'Connection':'keep-alive',\
             'Accept-Encoding':'gzip, deflate',\
             'Cookie':'DLZBKG=42a227e9-e325-49e3-beb1-a007a0dcc28d; bkg_cookie_test=wp2vcv5e'\
-            } 
-    
+            }
+
     ####################################################
     # National geographical institute for Spain
     # Permissive copyright
@@ -329,13 +347,13 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             "FORMAT=image/jpeg&VERSION=1.0.0&SERVICE=WMTS&REQUEST=GetTile&"+\
             "LAYER=OI.OrthoimageCoverage&TILEMATRIXSET=GoogleMapsCompatible&"+\
             "TILEMATRIX="+str(zoomlevel)+"&TILEROW="+str(til_y)+"&TILECOL="+str(til_x)
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
 
     ####################################################
     # National geographical institute of Italy
-    # Slightly permissive copyright 
+    # Slightly permissive copyright
     ####################################################
-    elif website=='IT': 
+    elif website=='IT':
         [latmax,lonmin]=gtile_to_wgs84(til_x_left,til_y_top,zoomlevel)
         [latmin,lonmax]=gtile_to_wgs84(til_x_left+8,til_y_top+8,zoomlevel)
         url="http://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/raster/"+\
@@ -345,7 +363,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             str(latmin)+','+str(lonmin)+','+str(latmax)+','+str(lonmax)+\
             "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
-    elif website=='IT2': 
+    elif website=='IT2':
         [latmax,lonmin]=gtile_to_wgs84(til_x_left,til_y_top,zoomlevel)
         [latmin,lonmax]=gtile_to_wgs84(til_x_left+8,til_y_top+8,zoomlevel)
         url="http://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/raster/"+\
@@ -355,7 +373,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             str(latmin)+','+str(lonmin)+','+str(latmax)+','+str(lonmax)+\
             "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
-    
+
     ####################################################
     # National geographical institute of Sweden (thanks to Magnus1)
     # Permissive copyright
@@ -399,12 +417,12 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             }
 
     ####################################################
-    # Sweden Hitta 
+    # Sweden Hitta
     # Unsure about copyright
     ####################################################
     elif website=='Hitta':
         url="http://static.hitta.se/tile/v3/1/"+str(zoomlevel)+"/"+str(til_x)+"/"+str(2**zoomlevel-1-til_y)
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
 
     ####################################################
     # Sweden Eniro karta (thanks to Durian)
@@ -413,11 +431,11 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
     elif website=='SE':
         url="http://map04.eniro.no/geowebcache/service/tms1.0.0/aerial/"+\
             str(zoomlevel)+"/"+str(til_x)+"/"+str(2**zoomlevel-1-til_y)+".jpeg"
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
 
 
     ####################################################
-    # National geographical institute of Poland 
+    # National geographical institute of Poland
     # Unsure about copyright
     ####################################################
     elif website=='PL':
@@ -429,13 +447,13 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             str(lonmin)+','+str(latmin)+','+str(lonmax)+','+str(latmax)+\
             "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
-   
+
     ####################################################
-    # National geographical institute of Norway 
+    # National geographical institute of Norway
     # Unsure about copyright
     # !!! Doesn't work as of September 1st 2016 !!!
     ####################################################
-    elif website in ['NO','NO2']: 
+    elif website in ['NO','NO2']:
         if not pyproj_loaded:
             return 'error'
         text_til_x_left=(til_x_left//16)*16
@@ -464,12 +482,12 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
              str(minx)+','+str(miny)+','+str(maxx)+','+str(maxy)+\
              "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
-    
+
 
     ####################################################
     # National geographical institute of Denmark
     ####################################################
-    elif website=='DK': 
+    elif website=='DK':
         [latmax,lonmin]=gtile_to_wgs84(til_x_left,til_y_top,zoomlevel)
         [latmin,lonmax]=gtile_to_wgs84(til_x_left+8,til_y_top+8,zoomlevel)
         url="http://kortforsyningen.kms.dk/orto_foraar?LAYERS=orto_foraar&FORMAT=image%2Fjpeg"+\
@@ -484,7 +502,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
     # National geographical institute of Belgium (Wallonie only)
     # Permissive copyright
     ####################################################
-    elif website=='BE_Wa': 
+    elif website=='BE_Wa':
         [latmax,lonmin]=gtile_to_wgs84(til_x_left,til_y_top,zoomlevel)
         [latmin,lonmax]=gtile_to_wgs84(til_x_left+8,til_y_top+8,zoomlevel)
         url="http://geoservices.wallonie.be/arcgis/services/IMAGERIE/ORTHO_2012_2013/"+\
@@ -498,7 +516,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
     # National geographical institute of the Netherlands (lufoto2005)
     # Permissive copyright
     ####################################################
-    elif website=='NE': 
+    elif website=='NE':
         [latmax,lonmin]=gtile_to_wgs84(til_x_left,til_y_top,zoomlevel)
         [latmin,lonmax]=gtile_to_wgs84(til_x_left+8,til_y_top+8,zoomlevel)
         url="http://gdsc.nlr.nl/wms/lufo2005?"+\
@@ -507,12 +525,12 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             str(lonmin)+','+str(latmin)+','+str(lonmax)+','+str(latmax)+\
             "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
-    
+
     ####################################################
     # National geographical institute of the Netherlands (dlnk2014)
     # Permissive copyright
     ####################################################
-    elif website=='NE2': 
+    elif website=='NE2':
         [latmax,lonmin]=gtile_to_wgs84(til_x_left,til_y_top,zoomlevel)
         [latmin,lonmax]=gtile_to_wgs84(til_x_left+8,til_y_top+8,zoomlevel)
         url="http://geodata1.nationaalgeoregister.nl/luchtfoto/wms?LAYERS=luchtfoto_png"+\
@@ -522,7 +540,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             str(lonmin)+','+str(latmin)+','+str(lonmax)+','+str(latmax)+\
             "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
-    
+
     ####################################################
     # Geoportal Slovenia
     ####################################################
@@ -555,7 +573,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
              str(minx)+','+str(miny)+','+str(maxx)+','+str(maxy)+\
              "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
-   
+
     ####################################################
     # Geoportal Croatia
     ####################################################
@@ -565,15 +583,15 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             "LAYERS=DOF&format=image/jpeg&STYLE=default&"+\
             "CRS=EPSG%3A4326&BBOX="+\
             str(latmin)+','+str(lonmin)+','+str(latmax)+','+str(lonmax)+\
-            "&WIDTH=2048&HEIGHT=2048" 
+            "&WIDTH=2048&HEIGHT=2048"
         fake_headers=fake_headers_generic
 
- 
-    
+
+
     ####################################################
-    # National geographical institute of Austria 
+    # National geographical institute of Austria
     ####################################################
-    elif website=='OST': 
+    elif website=='OST':
         server=random.randint(1,4)
         url="http://maps"+str(server)+".wien.gv.at/basemap/bmaporthofoto30cm/normal/google3857/"+\
              str(zoomlevel)+"/"+str(til_y_top)+"/"+str(til_x_left)+".jpeg"
@@ -582,7 +600,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
 
     ####################################################
     # Swiss Federal Geo Portal
-    # Restrictive copyright + water marked 
+    # Restrictive copyright + water marked
     # (see http://www.swisstopo.admin.ch/internet/swisstopo/en/home/swisstopo/legal_bases/use_without_licence.html
     ####################################################
     elif website=="CH":
@@ -599,8 +617,8 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
 				'Origin':'http://map.geo.admin.ch',\
                 'Connection':'keep-alive'\
                 }
-    
-    
+
+
     ####################################################
     # Mapy.cz CZ
     # Viewer on mapy.cz (thanks to 'suplere')
@@ -610,7 +628,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
         url="http://m"+str(server)+".mapserver.mapy.cz/ophoto-m/"+\
         	str(zoomlevel)+"-"+str(til_x)+"-"+str(til_y)
         fake_headers=fake_headers_generic
-    
+
     ####################################################
     # Australia South Wester territory : Sixmaps
     # Unsure about copyright
@@ -620,8 +638,8 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
         url="http://maps"+str(server)+".six.nsw.gov.au/arcgis/rest/services/"\
                +"sixmaps/LPI_Imagery_Best/MapServer/tile/"+\
                str(zoomlevel)+"/"+str(til_y)+"/"+str(til_x)
-        fake_headers=fake_headers_generic       
-    
+        fake_headers=fake_headers_generic
+
     ####################################################
     # New Zealand (partial but very good in some places)
     # Open data
@@ -632,8 +650,8 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
         url= "https://tiles-"+dico_letters[server]+".data-cdn.linz.govt.nz/services;"+\
              "key=2758b48d7a4446a6a49d2380b0882575/tiles/v4/layer=1934/"+\
              str(zoomlevel)+"/"+str(til_x)+"/"+str(til_y)+".png"
-        fake_headers=fake_headers_generic       
-    
+        fake_headers=fake_headers_generic
+
     ####################################################
     # Japan 2007 imagery (partial but very good in some places)
     # Unsure about copyright
@@ -641,19 +659,7 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
     elif website=='JP':
         url= "http://cyberjapandata.gsi.go.jp/xyz/ort/"+\
              str(zoomlevel)+"/"+str(til_x)+"/"+str(til_y)+".jpg"
-        fake_headers=fake_headers_generic       
-    
-    ####################################################
-    # Opentopomap
-    # Open data
-    ####################################################
-    elif website=="OTM":
-        if zoomlevel > 11:
-            return error # They have a small server
-        else:
-            url="http://opentopomap.org/"+str(zoomlevel)+"/"+str(til_x)+\
-                "/"+str(til_y)+".png"
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
 
 
     ####################################################
@@ -663,21 +669,54 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
     elif website=='FO':
         url="http://www.kortal.fo/background/gwc/service/tms/1.0.0/FDS:Mynd_Verdin@EPSG:900913@jpg/"+\
             str(zoomlevel)+"/"+str(til_x)+"/"+str(2**zoomlevel-1-til_y)+".jpeg"
-        fake_headers=fake_headers_generic    
+        fake_headers=fake_headers_generic
         return [url,fake_headers]
-    
+
+    ####################################################
+    # Estonian Geoportal
+    # Visible on http://kaart.delfi.ee
+    # Permissive copyright
+    ####################################################
+    elif website=="EST":
+        if not pyproj_loaded:
+            return 'error'
+        text_til_x_left=(til_x_left//16)*16
+        text_til_y_top=(til_y_top//16)*16
+        montx=0 if til_x_left%16==0 else 1
+        monty=0 if til_y_top%16==0 else 1
+        [latmax,lonmin]=gtile_to_wgs84(text_til_x_left,text_til_y_top,zoomlevel)
+        [latmin,lonmax]=gtile_to_wgs84(text_til_x_left+16,text_til_y_top+16,zoomlevel)
+        [ulx,uly]=pyproj.transform(epsg['4326'],epsg['3301'],lonmin,latmax)
+        [urx,ury]=pyproj.transform(epsg['4326'],epsg['3301'],lonmax,latmax)
+        [llx,lly]=pyproj.transform(epsg['4326'],epsg['3301'],lonmin,latmin)
+        [lrx,lry]=pyproj.transform(epsg['4326'],epsg['3301'],lonmax,latmin)
+        text_minx=min(ulx,llx)
+        text_maxx=max(urx,lrx)
+        text_miny=min(lly,lry)
+        text_maxy=max(uly,ury)
+        deltax=text_maxx-text_minx
+        deltay=text_maxy-text_miny
+        minx=text_minx+montx*deltax/2.0
+        maxx=minx+deltax/2.0
+        miny=text_miny+(1-monty)*deltay/2.0
+        maxy=miny+deltay/2.0
+        url="http://kaart.maaamet.ee/wms/fotokaart?FORMAT=image/jpeg&VERSION=1.1.1&SERVICE=WMS&REQUEST=GetMap"+\
+            "&LAYERS=EESTIFOTO&STYLES=&SRS=EPSG%3A3301&WIDTH=2048&HEIGHT=2048&BBOX="+\
+            str(minx)+','+str(miny)+','+str(maxx)+','+str(maxy)
+        fake_headers=fake_headers_generic
+
 
     ####################################################
     # La Loire atlantique vue du ciel
-    # Open (and nice) data ! 
+    # Open (and nice) data !
     ####################################################
     elif  website=="F44":
         server=random.randint(1,7)
         dico_letters={1:"a",2:"b",3:"c",4:"d",5:"e",6:"f",7:"g"}
         url="http://"+dico_letters[server]+".tiles.cg44.makina-corpus.net/ortho-2012/"\
                 +str(zoomlevel)+"/"+str(til_x)+"/"+str(2**zoomlevel-1-til_y)+".jpg"
-        fake_headers=fake_headers_generic        
-   
+        fake_headers=fake_headers_generic
+
     ####################################################
     # Geneva area
     # Visible on ge.ch/sitg
@@ -710,13 +749,13 @@ def http_requests_form(til_x_left,til_y_top,zoomlevel,website):
             "MapServer/WMSServer?FORMAT=image/jpeg&VERSION=1.1.1&SERVICE=WMS&REQUEST=GetMap&LAYERS=0&STYLES=&SRS=EPSG%3A2056&BBOX="+\
             str(minx)+','+str(miny)+','+str(maxx)+','+str(maxy)+\
             "&WIDTH=2048&HEIGHT=2048"
-        fake_headers=fake_headers_generic       
+        fake_headers=fake_headers_generic
     else:
         try:
             [url,fake_headers]=APL_request(til_x_left,til_y_top,zoomlevel,website)
         except:
             print("The photo album \'"+website+"\' that you have requested "+\
-              "is not or no longer implemented in this release. You will get white tiles !!!")	   
+              "is not or no longer implemented in this release. You will get white tiles !!!")	
             return ['error','']
     return [url,fake_headers]
 ##############################################################################
