@@ -5,15 +5,15 @@
 /*                                                                           */
 /*                  A straightforward adaptation of Triangle                 */
 /*                               to be used                                  */
-/*                      for the X-Plane flight simulator                     */                            
+/*                      for the X-Plane flight simulator                     */
 /*                                                                           */
-/*                                                                           */ 
+/*                                                                           */
 /*   The following program is a short adaptation of Triangle from Jonathan   */
-/*   Shewchuk to be used within the process of 3D geographic mesh            */ 
+/*   Shewchuk to be used within the process of 3D geographic mesh            */
 /*   generation based on landclasses and curvature inputs from GIS data.     */
 /*   The original program Triangle has a very handy user defined function    */
 /*   called triunsuitable() which allows the user to accept or reject a      */
-/*   triangle based on additional code. In the present implementation, it is */ 
+/*   triangle based on additional code. In the present implementation, it is */
 /*   defined in such a way that the maximum curvature of the terrain to be   */
 /*   meshed in the proposed triangle is computed (based on external data)    */
 /*   and tested against the size of the triangle. If max_curv * size*        */
@@ -254,7 +254,7 @@
 /* If yours is not a Unix system, define the NO_TIMER compiler switch to     */
 /*   remove the Unix-specific timing code.                                   */
 
-#define NO_TIMER 
+#define NO_TIMER
 
 /* To insert lots of self-checks for internal errors, define the SELF_CHECK  */
 /*   symbol.  This will slow down the program significantly.  It is best to  */
@@ -280,7 +280,7 @@
 /*   generating an object library (triangle.o) by defining the TRILIBRARY    */
 /*   symbol.                                                                 */
 
-#define REDUCED 
+#define REDUCED
 /* #define CDT_ONLY */
 
 /* On some machines, my exact arithmetic routines might be defeated by the   */
@@ -1463,7 +1463,7 @@ REAL   area;
   if (maxlen2 < hmin*hmin){
       return 0;
   }
-  
+
   maxx = (triorg[0] > triapex[0]) ? triorg[0] : triapex[0];
   maxx = (tridest[0] > maxx) ? tridest[0] : maxx;
   minx = (triorg[0] < triapex[0]) ? triorg[0] : triapex[0];
@@ -1472,13 +1472,13 @@ REAL   area;
   maxy = (tridest[1] > maxy) ? tridest[1] : maxy;
   miny = (triorg[1] < triapex[1]) ? triorg[1] : triapex[1];
   miny = (tridest[1] < miny) ? tridest[1] : miny;
- 
+
   jmin=floor(minx*(ndem-1))-1;
   jmin = (jmin > 0) ? jmin : 0;
-  jmax=ceil(maxx*(ndem-1))-1;    
+  jmax=ceil(maxx*(ndem-1))-1;
   jmax= (jmax < (ndem-3)) ? jmax : (ndem-3);
-  
-  imin = floor((1-maxy)*(ndem-1))-1;    
+
+  imin = floor((1-maxy)*(ndem-1))-1;
   imin = (imin > 0) ? imin : 0;
   imax = ceil((1-miny)*(ndem-1))-1;
   imax = (imax < (ndem-3)) ? imax : (ndem-3);
@@ -1492,14 +1492,14 @@ REAL   area;
           maxcurv = (tmp > maxcurv) ? tmp : maxcurv;
       }
   }
-  if  (maxlen2*pow(maxcurv,2) > errormax/(ndem-1)) {
+  if  (maxlen2*pow(maxcurv,2) > errormax*pow(1200.0/ndem,2)*0.001) {
       return 1;
   } else {
     return 0;
   }
 }
 
-/* End of : Added for Triangle4XP */ 
+/* End of : Added for Triangle4XP */
 
 #endif /* not EXTERNAL_TEST */
 
@@ -3612,8 +3612,8 @@ struct behavior *b;
             strncpy(b->alt_filename, argv[i], FILENAMESIZE - 1);
             b->alt_filename[FILENAMESIZE - 1] = '\0';
         }
-        else {  
-        /* End of : Added for Triangle4XP */    
+        else {
+        /* End of : Added for Triangle4XP */
             strncpy(b->innodefilename, argv[i], FILENAMESIZE - 1);
             b->innodefilename[FILENAMESIZE - 1] = '\0';
         /* Start of : Added for Triangle4XP */
@@ -6567,7 +6567,7 @@ REAL dheight;
   adxbdy = adx * bdy;
   bdxady = bdx * ady;
 
-  det = adheight * (bdxcdy - cdxbdy) 
+  det = adheight * (bdxcdy - cdxbdy)
       + bdheight * (cdxady - adxcdy)
       + cdheight * (adxbdy - bdxady);
 
@@ -11615,7 +11615,7 @@ FILE *polyfile;
       for (j = 0; j < 2; j++) {
         if ((end[j] < b->firstnumber) ||
             (end[j] >= b->firstnumber + m->invertices)) {
-          printf("Error:  Segment %ld has an invalid vertex index.\n", 
+          printf("Error:  Segment %ld has an invalid vertex index.\n",
                  segmentnumber);
           triexit(1);
         }
@@ -13074,7 +13074,7 @@ REAL area;
       /* We want to traverse the grid subsegments too, we use boundary      */
       /* markers (with marker =3) for those subsegments, and ask to         */
       /* and allow the infection process to traverse them, in addition      */
-      /* to the dummysub subsegments of the original triangle.c             */ 
+      /* to the dummysub subsegments of the original triangle.c             */
       if ((neighbor.tri != m->dummytri) && !infected(neighbor)
           && ((neighborsubseg.ss == m->dummysub)|(mark(neighborsubseg) == 3))) {
       /* End of : Added for Triangle4XP                                     */
@@ -13254,14 +13254,14 @@ int regions;
 
   if (regions > 0) {
     /*if (!b->quiet) {*/
-    if (1==1) {  
+    if (1==1) {
       if (b->regionattrib) {
         if (b->vararea) {
           printf("  Spreading regional attributes and area constraints.\n");
         } else {
           printf("  Spreading regional attributes.\n");
         }
-      } else { 
+      } else {
         printf("  Spreading regional area constraints.\n");
       }
     }
@@ -14634,7 +14634,7 @@ char **argv;
             ry=0.999;
         }
         if (rx>=ry) {
-            Delta_alt_31=alt[((ndem-1)-ny)*ndem+nx]-alt[((ndem-1)-ny)+nx+1];
+            Delta_alt_31=alt[((ndem-1)-ny)*ndem+nx]-alt[((ndem-1)-ny)*ndem+nx+1];
             Delta_alt_12=alt[((ndem-1)-ny)*ndem+nx+1]-alt[((ndem-1)-ny-1)*ndem+nx+1];
             normvector=sqrt(pow((100000/ndem),2)+pow(Delta_alt_12,2)+pow(Delta_alt_31,2));
             u=Delta_alt_31/normvector;
@@ -15771,6 +15771,22 @@ struct behavior *b;
 /*                                                                           */
 /*****************************************************************************/
 
+void printfcomma (long int n) {
+    if (n < 0) {
+        printf ("-");
+        printfcomma (-n);
+        return;
+    }
+    if (n < 1000) {
+        printf ("%ld", n);
+        return;
+    }
+    printfcomma (n/1000);
+    printf (",%03ld", n%1000);
+}
+
+
+
 #ifdef ANSI_DECLARATORS
 void statistics(struct mesh *m, struct behavior *b)
 #else /* not ANSI_DECLARATORS */
@@ -15792,9 +15808,13 @@ struct behavior *b;
     }
   }
 
-  printf("\n  Mesh vertices: %ld\n", m->vertices.items - m->undeads);
+  printf("\n  Mesh vertices: ");
+  printfcomma(m->vertices.items - m->undeads);
+  printf("\n");
   printf("                  -----------------\n");
-  printf("  Mesh triangles: ---> %ld <---\n", m->triangles.items);
+  printf("  Mesh triangles: ---> ");
+  printfcomma(m->triangles.items);
+  printf(" <---\n");
   printf("                  -----------------\n");
   printf("  Mesh edges: %ld\n", m->edges);
   printf("  Mesh exterior boundary edges: %ld\n", m->hullsize);
@@ -15805,6 +15825,7 @@ struct behavior *b;
            m->subsegs.items);
   }
   printf("\n");
+  fflush(stdout);
 
   if (b->verbose) {
     quality_statistics(m, b);
@@ -15925,7 +15946,7 @@ char **argv;
   FILE *polyfile;
   /* Start of : Added for Triangle4XP */
     int         i,j;
-    long        offset; 
+    long        offset;
     float      aa,bb,cc,signe;
   /* End of : Added for Triangle4XP */
 #endif /* not TRILIBRARY */
@@ -15954,11 +15975,12 @@ char **argv;
     triexit(1);
   }
   /*  allocate space for nbr of elements in the alt and hme matrix   */
-  
+
   printf("  Loading altitudes from DEM file.\n");
-  alt = (float *) malloc(sizeof(float)*ndem*ndem); 
-  hme = (float *) malloc(sizeof(float)*(ndem-2)*(ndem-2)); 
-  
+  fflush(stdout);
+  alt = (float *) malloc(sizeof(float)*ndem*ndem);
+  hme = (float *) malloc(sizeof(float)*(ndem-2)*(ndem-2));
+
   for (i=0 ; i<ndem ; i++)
     {
         for (j=0 ; j<ndem ; j++)
@@ -15968,6 +15990,7 @@ char **argv;
  }
   fclose(alt_file);
   printf("  Computing curvatures from altitudes.\n");
+  fflush(stdout);
   for (i=1 ; i<(ndem-1) ; i++)
     {
         for (j=1 ; j<(ndem-1) ; j++)
@@ -15981,7 +16004,7 @@ char **argv;
             hme[(ndem-2)*(i-1)+(j-1)]=fabs(aa+bb+signe*sqrt(pow(aa-bb,2)+4*pow(cc,2)))/2.0;
         }
     }
-  /* End of : Added for Triangle4XP */ 
+  /* End of : Added for Triangle4XP */
 
   m.steinerleft = b.steiner;
 
