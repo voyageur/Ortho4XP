@@ -10,12 +10,22 @@ This repository is a personal fork where I work on some patches (Linux-only for 
 
 To test it, I recommend grabbing Ortho4XP.py file and copy it in an existing Ortho4XP directory
 
-To use this repository directly, some useful commands:
+To use this repository directly, after cloning build the Triangle4xp utility:
 ```shell
-# Build Triangle4XP binary
 gcc -O2 -lm Utils/Triangle4XP.c -o Utils/Triangle4XP
+```
 
-# Generate manual
+List of python modules needed:
+
+| Python module | Gentoo configuration | Fedora package |
+|-|-|-|
+| numpy | dev-python/numpy | python3-numpy |
+| tkinter | dev-lang/python:3[tk] | python3-tk |
+| pillow (PIL) with Tk | dev-python/pillow[tk] | python3-pillow-tk |
+
+
+If you want to build the manual (and if you have a working latex installation):
+```shell
 cd Manual && latexmk -pdflatex="pdflatex -interactive=nonstopmode" -pdf *tex
 
 ```
