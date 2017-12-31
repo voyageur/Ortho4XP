@@ -12,7 +12,7 @@ To test it, I recommend grabbing Ortho4XP.py file and copy it in an existing Ort
 
 To use this repository directly, after cloning build the Triangle4xp utility:
 ```shell
-gcc -O2 -lm Utils/Triangle4XP.c -o Utils/Triangle4XP
+gcc -O2 Utils/Triangle4XP.c -lm -o Utils/Triangle4XP
 ```
 
 List of python modules needed:
