@@ -1,7 +1,9 @@
 # Ortho4XP
-A base mesh creation tool for the X-Plane 10 flight simulator
+A base mesh creation tool for the X-Plane flight simulator
 
-The main project can be found at :
+**Deprecated repository**: there is now an official git repository, so head to https://github.com/oscarpilote/Ortho4XP for current version from actual developer
+
+Original links:
 * http://forums.x-plane.org/index.php?/forums/topic/90469-ortho4xp/ (English forum thread)
 * http://www.x-plane.fr/showthread.php?t=55404 (French forum thread)
 * https://www.dropbox.com/sh/cjjwu92mausoh04/AACt-QzgMRwKDL392K_Ux3cPa (Dropbox download link)
