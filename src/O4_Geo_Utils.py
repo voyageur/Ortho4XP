@@ -17,8 +17,6 @@ def dist(A,B):
     return 2*earth_radius*atan2(sqrt(a),sqrt(1-a))
 
 epsg={}
-epsg['4326']=pyproj.Proj(init='epsg:4326')
-epsg['3857']=pyproj.Proj(init='epsg:3857')
 
 
 ##############################################################################
@@ -31,7 +29,8 @@ def webmercator_zoomlevel(lat, pixel_size):
 
 ##############################################################################
 def transform(s_epsg, t_epsg, s_x, s_y):
-    return pyproj.transform(epsg[s_epsg], epsg[t_epsg], s_x, s_y)
+    transformer = pyproj.Transformer.from_crs("epsg:" + s_epsg, "epsg:" + t_epsg, always_xy=True)
+    return transformer.transform(s_x, s_y)
 ##############################################################################
 
 ##############################################################################
