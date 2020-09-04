@@ -34,3 +34,5 @@ virtualenv/
 **/*.orig
 **/Thumbs.db
 tmp/
+
+.*.swp
