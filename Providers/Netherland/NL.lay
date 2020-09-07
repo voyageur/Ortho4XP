@@ -4,6 +4,6 @@ layers=Actueel_ortho25
 tilematrixset=EPSG:28992
 tile_size=256
 url_prefix=https://geodata.nationaalgeoregister.nl/luchtfoto/rgb/wmts?
-in_GUI=false
+in_GUI=False
 imagery_dir=code
 extent=Netherlands
