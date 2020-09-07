@@ -2,8 +2,9 @@
 Binary/
 
 # Ortho4XP workdir cache directories (in case workdir is kept within the source dir)
-Airport_Data/
+Airport_data/
 Elevation_data/
+Extents/Auto/
 Geotiffs/
 Masks/
 OSM_data/
@@ -14,7 +15,7 @@ Tiles/
 # Ortho4XP output and logs
 **/Ortho4XP.log
 .last_gui_params.txt
-yOrtho4XP_Overlays/
+yOrtho4XP_Overlays
 
 # Python: Byte-compiled / optimized / DLL files
 __pycache__/
