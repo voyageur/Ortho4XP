@@ -5,3 +5,4 @@ top_left_corner=-5403700 7116700
 tile_size=256
 url_template=http://map.govmap.gov.il/250318O3R6T9/{zoom_gov}/{y_gov}/{x_gov}.jpg
 max_threads=16
+in_GUI=False

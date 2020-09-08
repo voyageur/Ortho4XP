@@ -6,4 +6,3 @@ tile_size=256
 url_template=http://www10.emap.co.il/ArcGIS/rest/services/Clients/Bezeq_Ortho/MapServer/tile/{zoom}/{y}/{x}
 max_threads=16
 in_GUI=False
-
