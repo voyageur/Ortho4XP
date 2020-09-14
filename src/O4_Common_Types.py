@@ -283,7 +283,7 @@ class CoverZLConfig:
             self.by_icao = {IcaoCode(k): v for (k, v) in by_icao_dict.items()}
             self.max = max(self.non_icao, self.icao, *list(self.by_icao.values()))
         else:
-            raise Exception('CoverZL must be either an int, or a dict which MUST contain a "default" item')
+            raise Exception('CoverZL must be either an int, or a dict which MUST contain at least an "icao" and a "non-icao" item')
 
     def __str__(self):
         if isinstance(self._value, dict):
