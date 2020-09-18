@@ -18,6 +18,7 @@ from O4_Common_Types import CoverZLConfig, DecalConfig, ScreenRes
 
 cfg_vars={
     # App
+    'theme':                 {'module':'UI','type':str,'default':'alt','hint':'General application theme, note many non-standard themes may not look right.'},
     'verbosity':             {'module':'UI','type':int,'default':1,'values':(0,1,2,3),'hint':'Verbosity determines the amount of information about the whole process which is printed on screen.  Critical errors, if any, are reported in all states as well as in the Log. Values above 1 are probably only useful for for debug purposes.'},
     'cleaning_level':        {'module':'UI','type':int,'default':1,'values':(0,1,2,3),'hint':'Determines which temporary files are removed. Level 3 erases everything except the config and what is needed for X-Plane; Level 2 erases everything except what is needed to redo the current step only; Level 1 allows you to redo any prior step; Level 0 keeps every single file.'},
     'overpass_server_choice':{'module':'OSM','type':str,'default':'random','values':['random']+sorted(OSM.overpass_servers.keys()),'hint':'The (country) of the Overpass OSM server used to grab vector data. It can be modified on the fly (as all _Application_ variables) in case of problem with a particular server.'},
@@ -96,7 +97,7 @@ cfg_vars={
     'fill_nodata':         {'type':bool,'default':True,'hint':'When set, the no_data values in the raster will be filled by a nearest neighbour algorithm. If unset, they are turned into zero (can be useful for rasters with no_data over the whole oceanic part or partial LIDAR data).'}
 }
 
-list_app_vars=['verbosity','cleaning_level','overpass_server_choice',
+list_app_vars=['theme','verbosity','cleaning_level','overpass_server_choice',
                'skip_downloads','skip_converts','max_convert_slots','check_tms_response',
                'http_timeout','max_connect_retries','max_baddata_retries','ovl_exclude_pol','ovl_exclude_net','xplane_install_dir','custom_overlay_src']
 gui_app_vars_short=list_app_vars[:-2]
@@ -266,6 +267,9 @@ class Ortho4XP_Config(tk.Toplevel):
         self.main_frame.grid(row=0,column=0,sticky=N+S+W+E)
         self.frame_cfg.grid(row=0,column=0,pady=10,sticky=N+S+E+W)
         self.frame_lastbtn.grid(row=1,column=0,pady=10,sticky=N+S+E+W)
+
+        # Update themes (needs to be done after first frames)
+        cfg_vars['theme']['values']=sorted(ttk.Style().theme_names())
 
         # Variables and widgets and their placement
         self.v_={}
@@ -485,6 +489,9 @@ class Ortho4XP_Config(tk.Toplevel):
         if errors:
             error_text="The following variables had wrong type\nand were reset to their default value!\n\n* "+'\n* '.join(errors)
             self.popup("ERROR",error_text)
+
+        # Update theme
+        ttk.Style().theme_use(self.v_['theme'].get())
 
         # Trigger a cache update (will only run if needed)
         APT_SRC.AirportDataSource.update_cache()

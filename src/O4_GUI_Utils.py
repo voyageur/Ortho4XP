@@ -42,7 +42,7 @@ class Ortho4XP_GUI(tk.Tk):
     def __init__(self):
         tk.Tk.__init__(self)
         O4=ttk.Style()
-        O4.theme_use('alt')
+        O4.theme_use(CFG.UI.theme)
         O4.configure('Flat.TButton',background='light green',highlightbackground='light green',selectbackground='light green',highlightcolor='light green',highlightthickness=0,relief='flat')
         O4.map('Flat.TButton',background=[('disabled','pressed','!focus','active', 'light green')])
         O4.configure('O4.TCombobox',selectbackground='white',selectforeground='blue',fieldbackground='white',foreground='blue',background='white')
