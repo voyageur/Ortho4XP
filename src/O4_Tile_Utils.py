@@ -140,6 +140,16 @@ def build_all(tile):
 ##############################################################################
 
 ##############################################################################
+def build_all_overlay(tile):
+    if not build_all(tile):
+        return 0
+    OVL.build_overlay(tile.lat,tile.lon)
+    if UI.red_flag: UI.exit_message_and_bottom_line(); return 0
+    UI.is_working=0
+    return 1
+##############################################################################
+
+##############################################################################
 def build_tile_list(tile,list_lat_lon,do_osm,do_mesh,do_mask,do_dsf,do_ovl,do_ptc):
     if UI.is_working: return 0
     UI.red_flag=0

@@ -26,6 +26,7 @@ import O4_Vector_Utils as VECT
 import O4_Vector_Map as VMAP
 import O4_Mesh_Utils as MESH
 import O4_Mask_Utils as MASK
+import O4_Overlay_Utils as OVL
 import O4_Tile_Utils as TILE
 import O4_UI_Utils as UI
 import O4_Config_Utils as CFG
@@ -144,7 +145,7 @@ class Ortho4XP_GUI(tk.Tk):
         build_masks_button.bind("<ButtonPress-1>", self.build_masks)
         build_masks_button.bind("<Shift-ButtonPress-1>", self.build_masks)
         ttk.Button(self.frame_steps, text=" Build Imagery/DSF ",command=self.build_tile).grid(row=0,column=3, padx=5, pady=0,sticky=N+S+E+W)
-        ttk.Button(self.frame_steps, text="    All in one     ",command=self.build_all).grid(row=0,column=4, padx=5, pady=0,sticky=N+S+E+W)
+        ttk.Button(self.frame_steps, text="    All In One     ",command=self.build_all).grid(row=0,column=4, padx=5, pady=0,sticky=N+S+E+W)
 
         # Fourth row (Progress bars and controls)
         #Label(self.frame_left,anchor=W,text="DSF/Masks progress",bg="light green")
@@ -158,6 +159,8 @@ class Ortho4XP_GUI(tk.Tk):
         self.pgrb2.grid(row=0,column=1,padx=5,pady=0)
         self.pgrb3 =  ttk.Progressbar(self.frame_bars,mode='determinate',orient=HORIZONTAL,variable=self.pgrb3v)
         self.pgrb3.grid(row=0,column=2,padx=5,pady=0)
+        ttk.Button(self.frame_bars, text=" Extract Overlay ",command=self.build_overlay).grid(row=0,column=3,padx=5,sticky=N+S+E+W)
+        ttk.Button(self.frame_bars, text=" All In One with Overlay ",command=self.build_all_overlay).grid(row=0,column=4,padx=5,sticky=N+S+E+W)
 
         # Console
         self.console =  tk.Text(self.frame_console,bd=0)
@@ -325,6 +328,26 @@ class Ortho4XP_GUI(tk.Tk):
         except:
             UI.vprint(1,"Process aborted.\n"); return 0
         self.working_thread=threading.Thread(target=TILE.build_all,args=[tile])
+        self.working_thread.start()
+
+    def build_overlay(self):
+        try:
+            tile=self.tile_from_interface()
+            tile.make_dirs()
+        except:
+            UI.vprint(1,"Process aborted.\n"); return 0
+        self.working_thread=threading.Thread(
+                target=OVL.build_overlay,
+                args=self.get_lat_lon())
+        self.working_thread.start()
+
+    def build_all_overlay(self):
+        try:
+            tile=self.tile_from_interface()
+            tile.make_dirs()
+        except:
+            UI.vprint(1,"Process aborted.\n"); return 0
+        self.working_thread=threading.Thread(target=TILE.build_all_overlay,args=[tile])
         self.working_thread.start()
 
     def choose_custom_build_dir(self):
