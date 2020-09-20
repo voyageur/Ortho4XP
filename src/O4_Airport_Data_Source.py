@@ -738,7 +738,7 @@ class AirportCollection:
         gtiles = functools.reduce(lambda s1, s2: s1.union(s2),
                                   map(lambda a: set(filter(lambda t: not tile_margin_poly.disjoint(t.polygon()),
                                                            a.gtiles(zl, screen_res, fov, fpa))),
-                                      selected_airports))
+                                      selected_airports), set())
 
         if zl < cover_zl.max:
             # If we're not at ZLmax, compute the ZLn+1 gtiles, and "compact" them
