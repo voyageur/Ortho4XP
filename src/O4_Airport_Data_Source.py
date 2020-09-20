@@ -911,7 +911,7 @@ class XPlaneAptDatParser:
     def apt_dat_files():
         """Return the list of all the apt.dat files within the given X-Plane installation.
         The order is important : airports in the first files will be overwritten by those in the last ones (as in XP)"""
-        xp_dir = CFG.xplane_install_dir
+        xp_dir = CFG.OVL.xplane_install_dir
         apt_dat = os.path.join('Earth nav data', 'apt.dat')
         default_scenery = os.path.join(xp_dir, 'Resources', 'default scenery', 'default apt dat', apt_dat)
         global_airports = os.path.join(xp_dir, 'Custom Scenery', 'Global Airports', apt_dat)

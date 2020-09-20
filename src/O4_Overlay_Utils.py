@@ -12,6 +12,7 @@ ovl_exclude_net=[]
 
 # the following is meant to be modified by the CFG module at run time
 custom_overlay_src=''
+xplane_install_dir=''
 
 if 'dar' in sys.platform:
     unzip_cmd    = "7z "
@@ -30,10 +31,14 @@ def build_overlay(lat,lon):
     timer=time.time()
     UI.logprint("Step 4 for tile lat=",lat,", lon=",lon,": starting.")
     UI.vprint(0,"\nStep 4 : Extracting overlay for tile "+FNAMES.short_latlon(lat,lon)+" : \n--------\n")
-    file_to_sniff=os.path.join(custom_overlay_src,"Earth nav data",FNAMES.long_latlon(lat,lon)+'.dsf')
+    basefile_to_sniff=FNAMES.long_latlon(lat,lon)+'.dsf'
+    file_to_sniff=os.path.join(custom_overlay_src,"Earth nav data",basefile_to_sniff)
     if not os.path.exists(file_to_sniff):
-        UI.exit_message_and_bottom_line("   ERROR: file ",file_to_sniff,"absent. Recall that the overlay source directory needs to be set in the config window first.")
-        return 0
+        UI.lvprint(1,"   ERROR: file ",basefile_to_sniff,"not found in overlay source directory. Trying with global scenery overlay.")
+        file_to_sniff=os.path.join(xplane_install_dir,"Global Scenery/X-Plane 11 Global Scenery/Earth nav data",basefile_to_sniff)
+        if not os.path.exists(file_to_sniff):
+            UI.exit_message_and_bottom_line("   ERROR: file ",basefile_to_sniff,"not found in global scenery. Incorrect overlay source and/or X-Plane install directories in configuration window?")
+            return 0
     file_to_sniff_loc=os.path.join(FNAMES.Tmp_dir,FNAMES.short_latlon(lat,lon)+'.dsf')
     UI.vprint(1,"-> Making a copy of the original overlay DSF in tmp dir")
     try:

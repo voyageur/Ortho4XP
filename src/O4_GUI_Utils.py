@@ -1178,7 +1178,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                                 self.canvas.create_text((x0+x1)//2,(y0+y1)//2,justify=CENTER,text=content,fill='black',font=('Helvetica','12','normal')),\
                                 dir_name\
                                 )
-                        link=os.path.join(CFG.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+FNAMES.short_latlon(lat,lon))
+                        link=os.path.join(CFG.OVL.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+FNAMES.short_latlon(lat,lon))
                         if os.path.isdir(link):
                             if os.path.samefile(os.path.realpath(link),os.path.realpath(os.path.join(self.working_dir,dir_name))):
                                 if not OsX:
@@ -1225,7 +1225,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                                 dir_name\
                                 )
 
-            link=os.path.join(CFG.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+os.path.basename(self.working_dir))
+            link=os.path.join(CFG.OVL.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+os.path.basename(self.working_dir))
             if os.path.isdir(link):
                 if os.path.samefile(os.path.realpath(link),os.path.realpath(self.working_dir)):
                     for (lat0,lon0) in self.dico_tiles_done:
@@ -1297,7 +1297,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
         if (lat,lon) not in self.dico_tiles_done:
             return
         if not self.grouped:
-            link=os.path.join(CFG.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+FNAMES.short_latlon(lat,lon))
+            link=os.path.join(CFG.OVL.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+FNAMES.short_latlon(lat,lon))
             #target=os.path.realpath(os.path.join(self.working_dir,'zOrtho4XP_'+FNAMES.short_latlon(lat,lon)))
             target=os.path.realpath(os.path.join(self.working_dir,self.dico_tiles_done[(lat,lon)][-1]))
             if os.path.isdir(link) and os.path.samefile(os.path.realpath(link),target):
@@ -1308,7 +1308,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                     self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica','12','normal'))
                 return
         elif self.grouped:
-            link=os.path.join(CFG.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+os.path.basename(self.working_dir))
+            link=os.path.join(CFG.OVL.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+os.path.basename(self.working_dir))
             target=os.path.realpath(self.working_dir)
             if os.path.isdir(link) and os.path.samefile(os.path.realpath(link),os.path.realpath(self.working_dir)):
                 os.remove(link)
