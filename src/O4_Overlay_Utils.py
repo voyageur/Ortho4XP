@@ -98,6 +98,7 @@ def build_overlay(lat,lon):
                         else:
                             tmp=tmp.union([k for k in pol_dict if item in pol_dict[k]])
                 full_ovl_exclude_pol=tmp
+                UI.vprint(2,"Excluded polygon types: ", full_ovl_exclude_pol)
                 exclude_set_updated=True
             pol_type = int(line.split()[1])
             if pol_type not in full_ovl_exclude_pol:
