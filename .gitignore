@@ -12,7 +12,8 @@ Orthophotos/
 Previews/
 Tiles/
 
-# Ortho4XP output and logs
+# Ortho4XP configuration, log, output
+**/Ortho4XP.cfg
 **/Ortho4XP.log
 .last_gui_params.txt
 yOrtho4XP_Overlays
