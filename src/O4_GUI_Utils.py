@@ -474,8 +474,8 @@ class Ortho4XP_Custom_ZL(tk.Toplevel):
         self.zl_combo = ttk.Combobox(self.frame_left, textvariable=self.zl_choice, values=O4_Common_Types.ZoomLevels.OSM_LEVELS, width=3, state='readonly', style='O4.TCombobox')
         self.zl_combo.grid(row=2,column=0,padx=5,pady=3,sticky=E); row+=1
 
-        ttk.Button(self.frame_left, text='Zone List Editor', command=lambda: self.on_preview_button(lat, lon)).grid(row=row, padx=5, column=0, sticky=N + S + E + W); row+=1
-        ttk.Button(self.frame_left, text='Show Existing DSF layout', command=lambda: self.on_dsf_layout_button(lat, lon)).grid(row=row, padx=5, pady=3, column=0, sticky=N + S + E + W); row+=1
+        ttk.Button(self.frame_left, text='Zone List Editor', command=self.on_preview_button).grid(row=row, padx=5, column=0, sticky=N + S + E + W); row+=1
+        ttk.Button(self.frame_left, text='Show Existing DSF layout', command=self.on_dsf_layout_button).grid(row=row, padx=5, pady=3, column=0, sticky=N + S + E + W); row+=1
 
         # Widgets - Layers Controls
         tk.Label(self.frame_left,anchor=W,text="Layer Controls",fg = "light green",bg = "dark green",font = "Helvetica 16 bold italic").grid(row=row,column=0,pady=0,sticky=W+E); row+=1
@@ -759,8 +759,9 @@ class Ortho4XP_Custom_ZL(tk.Toplevel):
             self.redraw_poly()
             self.save_zone_cmd()
 
-    def on_preview_button(self, lat, lon):
+    def on_preview_button(self):
         # Reset the canvas and update the internal state with respect to the configuration (in case it has changed)
+        (lat,lon)=UI.gui.get_lat_lon()
         self.canvas.delete("all")
         self.update_internal_state(lat, lon)
         self.configure_canvas()
@@ -780,8 +781,9 @@ class Ortho4XP_Custom_ZL(tk.Toplevel):
         self._canvas_layers = self.pool.submit(self._async_render_layers,
                                                background_map_layer, texture_layers)
 
-    def on_dsf_layout_button(self, lat, lon):
+    def on_dsf_layout_button(self):
         # Reset the canvas and update the internal state with respect to the configuration (in case it has changed)
+        (lat,lon)=UI.gui.get_lat_lon()
         self.canvas.delete("all")
         self.update_internal_state(lat, lon)
         self.configure_canvas()
