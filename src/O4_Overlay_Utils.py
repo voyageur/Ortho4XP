@@ -154,3 +154,17 @@ def build_overlay(lat,lon):
     UI.timings_and_bottom_line(timer)
     return 1
 ##############################################################################
+
+##############################################################################
+def del_overlay(lat,lon):
+    dest_dir=os.path.join(FNAMES.Overlay_dir,"Earth nav data",FNAMES.round_latlon(lat,lon))
+    if os.path.exists(dest_dir) and os.path.isdir(dest_dir):
+        # Overlay File
+        dest_file=os.path.join(dest_dir,FNAMES.short_latlon(lat,lon)+'.dsf')
+        if os.path.exists(dest_file):
+            os.remove(dest_file)
+        # And directory if empty
+        if not os.listdir(dest_dir):
+            os.rmdir(dest_dir)
+    return 1
+##############################################################################

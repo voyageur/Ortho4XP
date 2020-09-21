@@ -1039,7 +1039,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
     earthzl=6
     resolution=2**earthzl*256
 
-    list_del_ckbtn = ['OSM data','X-Plane Airport data','Mask data','Jpeg imagery','Tile (whole)','Tile (textures)']
+    list_del_ckbtn = ['OSM data','X-Plane Airport data','Mask data','Jpeg imagery','Tile (textures)','Tile (whole)','Overlay for tile']
     list_do_ckbtn  = ['Assemble vector data','Triangulate 3D mesh','Draw water masks','Build imagery/DSF','Extract overlays','Read per tile cfg']
 
     canvas_min_x=900
@@ -1281,6 +1281,10 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
             try: shutil.rmtree(os.path.join(FNAMES.Imagery_dir,FNAMES.long_latlon(self.active_lat,self.active_lon)))
             except Exception as e:
                 UI.vprint(3,e)
+        if self.v_['Tile (textures)'].get() and not self.grouped:
+            try: shutil.rmtree(os.path.join(FNAMES.build_dir(self.active_lat,self.active_lon,self.custom_build_dir),'textures'))
+            except Exception as e:
+                UI.vprint(3,e)
         if self.v_['Tile (whole)'].get() and not self.grouped:
             try: shutil.rmtree(FNAMES.build_dir(self.active_lat,self.active_lon,self.custom_build_dir))
             except Exception as e:
@@ -1289,8 +1293,8 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                 for objid in self.dico_tiles_done[(self.active_lat,self.active_lon)][:2]:
                     self.canvas.delete(objid)
                 del(self.dico_tiles_done[(self.active_lat,self.active_lon)])
-        if self.v_['Tile (textures)'].get() and not self.grouped:
-            try: shutil.rmtree(os.path.join(FNAMES.build_dir(self.active_lat,self.active_lon,self.custom_build_dir),'textures'))
+        if self.v_['Overlay for tile'].get():
+            try: OVL.del_overlay(self.active_lat,self.active_lon)
             except Exception as e:
                 UI.vprint(3,e)
         return
