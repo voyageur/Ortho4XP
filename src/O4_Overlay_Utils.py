@@ -1,5 +1,6 @@
-import time
 import os
+import re
+import time
 import shutil
 import sys
 import subprocess
@@ -151,6 +152,7 @@ def build_overlay(lat,lon):
         pass
     if dsfid == '7z':
         os.remove(file_to_sniff_loc+'.7z')
+    add_transparent_roads(lat, lon)
     UI.timings_and_bottom_line(timer)
     return 1
 ##############################################################################
@@ -167,4 +169,58 @@ def del_overlay(lat,lon):
         if not os.listdir(dest_dir):
             os.rmdir(dest_dir)
     return 1
+##############################################################################
+
+# Based on https://github.com/melb00m/Transparency4Ortho code at 143b51d
+##############################################################################
+def add_transparent_roads(lat, lon):
+    # Check and create Library
+    enabled_groups = ["GRPLocal", "GRPLocalOneWay", "GRPPrimary", "GRPPrimaryOneWay", "GRPSecondary", "GRPSecondaryOneWa", "GRPSingleLane", "GRPSingleLaneOneway", "GRP_PlugsPri", "GRP_PlugsSec", "GRP_PlugsLoc", "GRP_PlugsRural", "GRP_JuncComp_EU", "GRP_JuncPlugs_EU", "GRPCompJunctionsDrp", "GRP_TransitionBYTs", "GRP_Centers", "GRP_Corners", "GRP_Stubs", "GRP_DeadEnds", "GRP_Approaches"]
+    roads_library = os.path.join(FNAMES.Overlay_dir, "Resources/1000_roads")
+    if not os.path.exists(roads_library):
+        UI.vprint(1,"-> Creating transparent roads library")
+        shutil.copytree(os.path.join(xplane_install_dir, "Resources/default scenery/1000 roads"), roads_library)
+        for ftr in ["library.lib", "library.txt"]:
+            file_path=os.path.join(roads_library, ftr)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+        for ft in ["roads.net", "roads_EU.net"]:
+            new_file_content=""
+            uncomment_enabled_block=False
+            with open(os.path.join(roads_library, ft), "r", encoding="utf-8") as input_file:
+                file_content = input_file.readlines()
+            for line in file_content:
+                matcher = re.match(r'(#\s+Group:\s+)(\w+)', line)
+                if matcher:
+                    uncomment_enabled_block = matcher.group(2) in enabled_groups
+                if uncomment_enabled_block:
+                    line = re.sub(r'^(QUAD|TRI|SEGMENT_DRAPED)', r'#(Transparency) \1', line)
+                new_file_content += line
+
+            with open(os.path.join(roads_library, ft), "w", encoding="utf-8") as output_file:
+                output_file.writelines(new_file_content)
+
+    # Process library.txt and add tile if needed
+    library_txt = os.path.join(FNAMES.Overlay_dir, "library.txt")
+    library_regions = []
+    UI.vprint(1,"-> Updating transparent roads library.txt for tile "+FNAMES.short_latlon(lat,lon))
+    if os.path.exists(library_txt):
+        with open(library_txt, "r", encoding="utf-8") as input_file:
+            library_regions = [line for line in input_file if re.search(r'^REGION_RECT',line)]
+
+    line="REGION_RECT {lon:+04d} {lat:+03d} {lon:+04d} {lat:+03d}\n".format(lat=lat,lon=lon)
+    if not line in library_regions:
+        library_regions.append(line)
+    library_regions.sort()
+    with open(library_txt, "w", encoding="utf-8") as output_file:
+        output_file.write("A\n800\nLIBRARY\n\nREGION_DEFINE yOrtho4XP_Overlays\n")
+        output_file.writelines(library_regions)
+        output_file.write("\nREGION yOrtho4XP_Overlays\n")
+        output_file.write("EXPORT_EXCLUDE lib/g10/roads.net Resources/1000_roads/roads.net\n")
+        output_file.write("EXPORT_EXCLUDE lib/g10/roads_EU.net Resources/1000_roads/roads_EU.net")
+
+##############################################################################
+def del_transparent_roads(lat, lon):
+    pass
 ##############################################################################
