@@ -30,6 +30,7 @@ cfg_vars={
     'max_baddata_retries':   {'module':'IMG','type':int,'default':5,'hint':'How much times do we try again after an internal server error for an imagery request. Only used if check_tms_response is set to True.'},
     'ovl_exclude_pol'    :   {'module':'OVL','type':list,'default':[0],'hint':'Indices of polygon types which one would like to leave aside in the extraction of overlays. The list of these indices in front of their name can be obtained by running the "extract overlay" process with verbosity = 2 (skip facades that can be numerous) or 3. Index 0 corresponds to beaches in Global and HD sceneries. Strings can be used in places of indices, in that case any polygon_def that contains that string is excluded, and the string can begin with a ! to invert the matching. As an exmaple, ["!.for"] would exclude everything but forests.'},
     'ovl_exclude_net'    :   {'module':'OVL','type':list,'default':[],'hint':'Indices of road types which one would like to leave aside in the extraction of overlays. The list of these indices is can be in the roads.net file within X-Plane Resources, but some sceneries use their own corresponding net definition file. Powerlines have index 22001 in XP11 roads.net default file.'},
+    'ovl_transparent_roads': {'module':'OVL','type':bool,'default':False,'hint':'Makes (non-motorway) roads transparent. This allows the roads from the tile to be visible instead of the generated roads, allowing for a more consistent and realistic look.'},
     'xplane_install_dir':    {'module':'OVL','type':str,'default':'<X-Plane Top Level directory>','hint':'Your X-Plane top-level directory. Used to find and parse the X-Plane apt.dat files. Also used for "1-click" linking of tiles from Ortho4XP to the X-Plane Custom Scenery folder. Supersedes the old "custom_scenery_dir" config option'},
     'custom_overlay_src':    {'module':'OVL','type':str,'default':'','hint':'The directory containing the sceneries with the overlays you would like to extract. You need to select the level of directory just _ABOVE_ Earth nav data.'},
     # Vector
@@ -98,7 +99,9 @@ cfg_vars={
 
 list_app_vars=['verbosity','cleaning_level','overpass_server_choice',
                'skip_downloads','skip_converts','max_convert_slots','check_tms_response',
-               'http_timeout','max_connect_retries','max_baddata_retries','ovl_exclude_pol','ovl_exclude_net','xplane_install_dir','custom_overlay_src']
+               'http_timeout','max_connect_retries','max_baddata_retries',
+               'ovl_exclude_pol','ovl_exclude_net','ovl_transparent_roads',
+               'xplane_install_dir','custom_overlay_src',]
 gui_app_vars_short=list_app_vars[:-2]
 gui_app_vars_long=list_app_vars[-2:]
 
