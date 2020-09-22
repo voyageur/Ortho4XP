@@ -166,10 +166,13 @@ def del_overlay(lat,lon):
         # Overlay File
         dest_file=os.path.join(dest_dir,FNAMES.short_latlon(lat,lon)+'.dsf')
         if os.path.exists(dest_file):
+            UI.vprint(1,"-> Removing overlay for tile "+FNAMES.short_latlon(lat,lon))
             os.remove(dest_file)
         # And directory if empty
         if not os.listdir(dest_dir):
             os.rmdir(dest_dir)
+    # Try to delete transparency library entry
+    edit_transparency_library(lat, lon, delete=True)
     return 1
 ##############################################################################
 
@@ -204,25 +207,31 @@ def add_transparent_roads(lat, lon):
                 output_file.writelines(new_file_content)
 
     # Process library.txt and add tile if needed
+    edit_transparency_library(lat, lon)
+
+##############################################################################
+def edit_transparency_library(lat, lon, delete=False):
     library_txt = os.path.join(FNAMES.Overlay_dir, "library.txt")
     library_regions = []
-    UI.vprint(1,"-> Updating transparent roads library.txt for tile "+FNAMES.short_latlon(lat,lon))
     if os.path.exists(library_txt):
         with open(library_txt, "r", encoding="utf-8") as input_file:
             library_regions = [line for line in input_file if re.search(r'^REGION_RECT',line)]
+    elif delete:
+        # Nothing to do
+        return 1
+    UI.vprint(1,"-> Updating transparent roads library for tile "+FNAMES.short_latlon(lat,lon))
 
     line="REGION_RECT {lon:+04d} {lat:+03d} {lon:+04d} {lat:+03d}\n".format(lat=lat,lon=lon)
-    if not line in library_regions:
+    if not (line in library_regions or delete):
         library_regions.append(line)
+    if line in library_regions and delete:
+        library_regions.remove(line)
     library_regions.sort()
+
     with open(library_txt, "w", encoding="utf-8") as output_file:
         output_file.write("A\n800\nLIBRARY\n\nREGION_DEFINE yOrtho4XP_Overlays\n")
         output_file.writelines(library_regions)
         output_file.write("\nREGION yOrtho4XP_Overlays\n")
         output_file.write("EXPORT_EXCLUDE lib/g10/roads.net Resources/1000_roads/roads.net\n")
         output_file.write("EXPORT_EXCLUDE lib/g10/roads_EU.net Resources/1000_roads/roads_EU.net")
-
-##############################################################################
-def del_transparent_roads(lat, lon):
-    pass
 ##############################################################################
