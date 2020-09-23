@@ -36,6 +36,7 @@ http_timeout=10
 check_tms_response=False
 max_connect_retries=10
 max_baddata_retries=10
+custom_access_key=''
 
 user_agent_generic="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
 request_headers_generic={
@@ -719,7 +720,7 @@ def get_wmts_image(tilematrix,til_x,til_y,provider,http_session):
   while True:
     request_headers=None
     if has_URL and provider['code'] in URL.custom_url_list:
-        (url,request_headers)=URL.custom_tms_request(tilematrix,til_x,til_y,provider)
+        (url,request_headers)=URL.custom_tms_request(tilematrix,til_x,til_y,provider,custom_access_key)
     elif provider['request_type']=='tms': # TMS
         url=provider['url_template'].replace('{zoom}',str(tilematrix))
         url=url.replace('{x}',str(til_x))

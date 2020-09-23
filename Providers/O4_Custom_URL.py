@@ -7,7 +7,7 @@ user_agent_generic="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Fire
 
 ############################################################################################################
 # list of affected provider_codes
-custom_url_list=('DK','DOP40','NIB','Here')
+custom_url_list=('Apple','DK','DOP40','NIB','Here')
 custom_url_list = custom_url_list+tuple([x + '_NAIP' for x in (
      'AL','AR','AZ','CA','CO','CT','DE','FL','GA','IA','ID','IL',
      'IN','KS','KY','LA','MA','MD','ME','MI','MN','MO','MS','MT',
@@ -98,7 +98,7 @@ def custom_wms_request(bbox,width,height,provider):
         url="https://gis.apfo.usda.gov/arcgis/rest/services/NAIP_Historical/"+provider['code']+"/ImageServer/exportImage?f=image&bbox="+str(xmin)+"%2C"+str(ymin)+"%2C"+str(xmax)+"%2C"+str(ymax)+"&imageSR=102100&bboxSR=102100&size="+str(width)+"%2C"+str(height)
         return (url,None)
 
-def custom_tms_request(tilematrix,til_x,til_y,provider):
+def custom_tms_request(tilematrix,til_x,til_y,provider,custom_access_key=''):
     if provider['code']=='NIB':
         NIB_token=get_NIB_token()
         url="http://agsservices.norgeibilder.no/arcgis/rest/services/Nibcache_UTM33_EUREF89_v2/MapServer/tile/"+str(tilematrix)+"/"+str(til_y)+"/"+str(til_x)+"?token="+NIB_token
@@ -106,4 +106,9 @@ def custom_tms_request(tilematrix,til_x,til_y,provider):
     elif provider['code']=='Here':
         Here_value=get_Here_value()
         url="https://"+random.choice(['1','2','3','4'])+".aerial.maps.api.here.com/maptile/2.1/maptile/"+Here_value+"/satellite.day/"+str(tilematrix)+"/"+str(til_x)+"/"+str(til_y)+"/256/jpg?app_id=bC4fb9WQfCCZfkxspD4z&app_code=K2Cpd_EKDzrZb1tz0zdpeQ"   
+        return (url,None)
+    elif provider['code']=='Apple':
+        url="https://sat-cdn"+random.choice(['1','2','3','4'])+".apple-mapkit.com/tile?style=7&size=1&scale=1&v=8012"
+        url+="&z="+str(tilematrix)+"&x="+str(til_x)+"&y="+str(til_y)
+        url+="&accessKey="+custom_access_key
         return (url,None)

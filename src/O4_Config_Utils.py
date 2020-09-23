@@ -94,14 +94,15 @@ cfg_vars={
                                                                                       '  => the corresponding decal is applied to each specified zl, or no decal if omitted'])},
     # Other
     'custom_dem':          {'type':str,'default':'','hint':'Path to an elevation data file to be used instead of the default Viewfinderpanoramas.org ones (J. de Ferranti). The raster must be in geopgraphical coordinates (EPSG:4326) but the extent need not match the tile boundary (requires Gdal). Regions of the tile that are not covered by the raster are mapped to zero altitude (can be useful for high resolution data over islands in particular).     '},
-    'fill_nodata':         {'type':bool,'default':True,'hint':'When set, the no_data values in the raster will be filled by a nearest neighbour algorithm. If unset, they are turned into zero (can be useful for rasters with no_data over the whole oceanic part or partial LIDAR data).'}
+    'fill_nodata':         {'type':bool,'default':True,'hint':'When set, the no_data values in the raster will be filled by a nearest neighbour algorithm. If unset, they are turned into zero (can be useful for rasters with no_data over the whole oceanic part or partial LIDAR data).'},
+    'custom_access_key':   {'module':'IMG','type':str,'default':'','hint':'Some image providers require an access key (valid for a short period of time). Copy a valid key (properly URL encoded) here if you use such a provider, and avoid long batch runs as the key may expire.'},
 }
 
 list_app_vars=['verbosity','cleaning_level','overpass_server_choice',
                'skip_downloads','skip_converts','max_convert_slots','check_tms_response',
                'http_timeout','max_connect_retries','max_baddata_retries',
                'ovl_exclude_pol','ovl_exclude_net','ovl_transparent_roads',
-               'xplane_install_dir','custom_overlay_src',]
+               'custom_access_key', 'xplane_install_dir','custom_overlay_src',]
 gui_app_vars_short=list_app_vars[:-2]
 gui_app_vars_long=list_app_vars[-2:]
 
@@ -139,7 +140,7 @@ try:
                 cmd=target+"=cfg_vars['"+var+"']['type'](value)"
             exec(cmd)
         except:
-            UI.lvprint(1,"Global config file contains an invalide line:",line)
+            UI.lvprint(1,"Global config file contains an invalid line:",line)
             pass
     f.close()
 except:
@@ -325,9 +326,9 @@ class Ortho4XP_Config(tk.Toplevel):
             ttk.Button(self.frame_cfg,text=text,takefocus=False,command=lambda item=item: self.popup(item,cfg_vars[item]['hint'])).grid(row=row,column=col,padx=2,pady=2,sticky=E+W+N+S)
             if cfg_vars[item]['type']==bool or 'values' in cfg_vars[item]:
                 values=['True','False'] if cfg_vars[item]['type']==bool else [str(x) for x in cfg_vars[item]['values']]
-                self.entry_[item]=ttk.Combobox(self.frame_cfg,values=values,textvariable=self.v_[item],width=6,state='readonly',style='O4.TCombobox')
+                self.entry_[item]=ttk.Combobox(self.frame_cfg,values=values,textvariable=self.v_[item],width=11,state='readonly',style='O4.TCombobox')
             else:
-                self.entry_[item]=tk.Entry(self.frame_cfg,textvariable=self.v_[item],width=7,bg='white',fg='blue')
+                self.entry_[item]=tk.Entry(self.frame_cfg,textvariable=self.v_[item],width=12,bg='white',fg='blue')
             self.entry_[item].grid(row=row,column=col+1,padx=(0,20),pady=2,sticky=N+S+W)
             j+=1
 
