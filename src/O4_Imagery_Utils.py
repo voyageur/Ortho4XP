@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import io
+import re
 import requests
 import queue
 import random
@@ -732,12 +733,9 @@ def get_wmts_image(tilematrix,til_x,til_y,provider,http_session):
         url=url.replace('{zoom_gov}','L{:02d}'.format(tilematrix))
         url=url.replace('{x_gov}','C{:08x}'.format(til_x))
         url=url.replace('{y_gov}','R{:08x}'.format(til_y))
-        if '{switch:' in url:
-            (url_0,tmp)=url.split('{switch:')
-            (tmp,url_2)=tmp.split('}')
-            server_list=tmp.split(',')
-            url_1=random.choice(server_list).strip()
-            url=url_0+url_1+url_2
+        def switch_replace(matchobj):
+            return random.choice(matchobj[1].split(',')).strip()
+        url=re.sub(r'{switch:([^}]+)}',switch_replace,url)
     elif provider['request_type']=='wmts': # WMTS
         url=provider['url_prefix']+"&SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER="+\
             provider['layers']+"&STYLE=&FORMAT=image/"+provider['image_type']+"&TILEMATRIXSET="+provider['tilematrixset']['identifier']+\
