@@ -16,16 +16,6 @@ ovl_transparent_roads=False
 custom_overlay_src=''
 xplane_install_dir=''
 
-if 'dar' in sys.platform:
-    unzip_cmd    = "7z "
-    dsftool_cmd  = os.path.join(FNAMES.Utils_dir,"DSFTool.app ")
-elif 'win' in sys.platform:
-    unzip_cmd    = os.path.join(FNAMES.Utils_dir,"7z.exe ")
-    dsftool_cmd  = os.path.join(FNAMES.Utils_dir,"DSFTool.exe ")
-else:
-    unzip_cmd    = "7z "
-    dsftool_cmd  = os.path.join(FNAMES.Utils_dir,"DSFTool ")
-
 ##############################################################################
 def build_overlay(lat,lon):
     if UI.is_working: return 0
@@ -48,13 +38,6 @@ def build_overlay(lat,lon):
     except:
         UI.exit_message_and_bottom_line("   ERROR: could not copy it. Disk full, write permissions, erased tmp dir ?")
         return 0
-    f = open(file_to_sniff_loc,'rb')
-    dsfid = f.read(2).decode('ascii')
-    f.close()
-    if dsfid == '7z':
-        UI.vprint(1,"-> The original DSF is a 7z archive, uncompressing...")
-        os.rename(file_to_sniff_loc,file_to_sniff_loc+'.7z')
-        os.system(unzip_cmd+' e -o'+FNAMES.Tmp_dir+' "'+file_to_sniff_loc+'.7z"')
     UI.vprint(1,"-> Converting the copy to text format")
     dsfconvertcmd=[dsftool_cmd.strip(),' -dsf2text '.strip(),file_to_sniff_loc,os.path.join(FNAMES.Tmp_dir,FNAMES.short_latlon(lat,lon)+'_tmp_dsf.txt')]
     fingers_crossed=subprocess.Popen(dsfconvertcmd,stdout=subprocess.PIPE,bufsize=0)
@@ -151,8 +134,6 @@ def build_overlay(lat,lon):
         os.remove(os.path.join(FNAMES.Tmp_dir,FNAMES.short_latlon(lat,lon)+'_tmp_dsf.txt.sea_level.raw'))
     except:
         pass
-    if dsfid == '7z':
-        os.remove(file_to_sniff_loc+'.7z')
     if ovl_transparent_roads:
         add_transparent_roads(lat, lon)
     UI.timings_and_bottom_line(timer)
