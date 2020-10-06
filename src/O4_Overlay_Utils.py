@@ -16,6 +16,13 @@ ovl_transparent_roads=False
 custom_overlay_src=''
 xplane_install_dir=''
 
+if 'dar' in sys.platform:
+    dsftool_cmd  = os.path.join(FNAMES.Utils_dir,"DSFTool.app ")
+elif 'win' in sys.platform:
+    dsftool_cmd  = os.path.join(FNAMES.Utils_dir,"DSFTool.exe ")
+else:
+    dsftool_cmd  = os.path.join(FNAMES.Utils_dir,"DSFTool ")
+
 ##############################################################################
 def build_overlay(lat,lon):
     if UI.is_working: return 0
