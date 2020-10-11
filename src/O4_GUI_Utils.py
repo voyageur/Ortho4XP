@@ -1109,15 +1109,17 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
 
         self.canvas  =  tk.Canvas(self.frame_right,bd=0)
         self.canvas.grid(row=0,column=0,sticky=N+S+E+W)
+        self.canvas.update()
+        # Make the canvas expandable
+        self.frame_right.master.rowconfigure(0, weight=1)
+        self.frame_right.master.columnconfigure(0, weight=1)
 
-        self.canvas.config(scrollregion=(1,1,2**self.earthzl*256-1,2**self.earthzl*256-1)) #self.canvas.bbox(ALL))
+        self.canvas.config(scrollregion=(1,1,2**self.earthzl*256-1,2**self.earthzl*256-1))
         (x0,y0)=GEO.wgs84_to_pix(lat+0.5,lon+0.5,self.earthzl)
         x0=max(1,x0-self.canvas_min_x/2)
         y0=max(1,y0-self.canvas_min_y/2)
         self.canvas.xview_moveto(x0/self.resolution)
         self.canvas.yview_moveto(y0/self.resolution)
-        self.nx0=int((8*x0)//self.resolution)
-        self.ny0=int((8*y0)//self.resolution)
         if 'dar' in sys.platform:
             self.canvas.bind("<ButtonPress-2>", self.scroll_start)
             self.canvas.bind("<B2-Motion>", self.scroll_move)
@@ -1127,14 +1129,29 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
         self.canvas.bind("<Double-Button-1>",self.select_tile)
         self.canvas.bind("<Shift-ButtonPress-1>",self.add_tile)
         self.canvas.bind("<Control-ButtonPress-1>",self.toggle_to_custom)
+        self.canvas.bind('<MouseWheel>', self.wheel)  # Windows and MacOS
+        self.canvas.bind('<Button-5>',   self.wheel)  # Linux, wheel scroll down
+        self.canvas.bind('<Button-4>',   self.wheel)  # Linux, wheel scroll up
         self.canvas.focus_set()
-        self.draw_canvas(self.nx0,self.ny0)
+
+        filepreview=os.path.join(FNAMES.Utils_dir,"Earth2_ZL"+str(self.earthzl)+".jpg")
+        if not os.path.exists(filepreview):
+            UI.lvprint(0,"Could not find Earth preview file ",filepreview,", please update your installation from a fresh copy.")
+            return
+        self.image=Image.open(filepreview)
+        self.width, self.height = self.image.size
+        self.imscale = 1.0  # scale for the canvas image
+        self.delta = 1.2  # zoom magnitude
+        # Put image into container rectangle and use it to set proper coordinates to the image
+        self.container = self.canvas.create_rectangle(0, 0, self.width, self.height, width=0)
+
         self.active_lat=lat
         self.active_lon=lon
         self.latlon.set(FNAMES.short_latlon(self.active_lat,self.active_lon))
-        [x0,y0]=GEO.wgs84_to_pix(self.active_lat+1,self.active_lon,self.earthzl)
-        [x1,y1]=GEO.wgs84_to_pix(self.active_lat,self.active_lon+1,self.earthzl)
+        (x0,y0,x1,y1) = self.map_box(lat,lon)
         self.active_tile=self.canvas.create_rectangle(x0,y0,x1,y1,fill='',outline='yellow',width=3)
+
+        self.show_image()
         self.threaded_preview()
         return
 
@@ -1165,7 +1182,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                         lon=int(dir_name.split("XP_")[1][3:7])
                     except:
                         continue
-                    # With the enlarged accepetance rule for directory name there might be more than one tile for the same (lat,lon), we skip all but the first encountered.
+                    # With the enlarged acceptance rule for directory name there might be more than one tile for the same (lat,lon), we skip all but the first encountered.
                     if (lat,lon) in self.dico_tiles_done: continue
                     [x0,y0]=GEO.wgs84_to_pix(lat+1,lon,self.earthzl)
                     [x1,y1]=GEO.wgs84_to_pix(lat,lon+1,self.earthzl)
@@ -1301,9 +1318,24 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                 UI.vprint(3,e)
         return
 
+    def map_xy(self,event):
+        bbox = self.canvas.bbox(self.container)
+        x=(self.canvas.canvasx(event.x)-bbox[0])/self.imscale
+        y=(self.canvas.canvasy(event.y)-bbox[1])/self.imscale
+        return (x,y)
+
+    def map_box(self,lat,lon):
+        bbox = self.canvas.bbox(self.container)
+        [x0,y0]=GEO.wgs84_to_pix(lat+1,lon,self.earthzl)
+        [x1,y1]=GEO.wgs84_to_pix(lat,lon+1,self.earthzl)
+        x0=x0*self.imscale+bbox[0]
+        y0=y0*self.imscale+bbox[1]
+        x1=x1*self.imscale+bbox[0]
+        y1=y1*self.imscale+bbox[1]
+        return (x0,y0,x1,y1)
+
     def select_tile(self,event):
-        x=self.canvas.canvasx(event.x)
-        y=self.canvas.canvasy(event.y)
+        (x,y) = self.map_xy(event)
         (lat,lon)=[floor(t) for t in GEO.pix_to_wgs84(x,y,self.earthzl)]
         self.active_lat=lat
         self.active_lon=lon
@@ -1312,22 +1344,19 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
             self.canvas.delete(self.active_tile)
         except:
             pass
-        [x0,y0]=GEO.wgs84_to_pix(lat+1,lon,self.earthzl)
-        [x1,y1]=GEO.wgs84_to_pix(lat,lon+1,self.earthzl)
+        (x0,y0,x1,y1) = self.map_box(lat,lon)
         self.active_tile=self.canvas.create_rectangle(x0,y0,x1,y1,fill='',outline='yellow',width=3)
         self.parent.lat.set(lat)
         self.parent.lon.set(lon)
         return
 
     def toggle_to_custom(self,event):
-        x=self.canvas.canvasx(event.x)
-        y=self.canvas.canvasy(event.y)
+        (x,y) = self.map_xy(event)
         (lat,lon)=[floor(t) for t in GEO.pix_to_wgs84(x,y,self.earthzl)]
         if (lat,lon) not in self.dico_tiles_done:
             return
         if not self.grouped:
             link=os.path.join(CFG.OVL.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+FNAMES.short_latlon(lat,lon))
-            #target=os.path.realpath(os.path.join(self.working_dir,'zOrtho4XP_'+FNAMES.short_latlon(lat,lon)))
             target=os.path.realpath(os.path.join(self.working_dir,self.dico_tiles_done[(lat,lon)][-1]))
             if os.path.isdir(link) and os.path.samefile(os.path.realpath(link),target):
                 os.remove(link)
@@ -1368,12 +1397,10 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
         return
 
     def add_tile(self,event):
-        x=self.canvas.canvasx(event.x)
-        y=self.canvas.canvasy(event.y)
+        (x,y) = self.map_xy(event)
         (lat,lon)=[floor(t) for t in GEO.pix_to_wgs84(x,y,self.earthzl)]
         if (lat,lon) not in self.dico_tiles_todo:
-            [x0,y0]=GEO.wgs84_to_pix(lat+1,lon,self.earthzl)
-            [x1,y1]=GEO.wgs84_to_pix(lat,lon+1,self.earthzl)
+            (x0,y0,x1,y1) = self.map_box(lat,lon)
             if not OsX:
                 self.dico_tiles_todo[(lat,lon)]=self.canvas.create_rectangle(x0,y0,x1,y1,fill='red',stipple='gray12')
             else:
@@ -1402,64 +1429,74 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
 
     def scroll_move(self,event):
         self.canvas.scan_dragto(event.x, event.y, gain=1)
-        self.redraw_canvas()
+        self.show_image()
         return
 
-    def redraw_canvas(self):
-        x0=self.canvas.canvasx(0)
-        y0=self.canvas.canvasy(0)
-        if x0<0: x0=0
-        if y0<0: y0=0
-        nx0=int((8*x0)//self.resolution)
-        ny0=int((8*y0)//self.resolution)
-        if nx0==self.nx0 and ny0==self.ny0:
-            return
+    def wheel(self,event):
+        ''' Zoom with mouse wheel '''
+        x = self.canvas.canvasx(event.x)
+        y = self.canvas.canvasy(event.y)
+        bbox = self.canvas.bbox(self.container)
+        if bbox[0] < x < bbox[2] and bbox[1] < y < bbox[3]:
+            # Ok! Inside the image
+            pass
         else:
-           self.nx0=nx0
-           self.ny0=ny0
-           try: self.canvas.delete(self.canv_imgNW)
-           except:pass
-           try: self.canvas.delete(self.canv_imgNE)
-           except:pass
-           try: self.canvas.delete(self.canv_imgSW)
-           except:pass
-           try: self.canvas.delete(self.canv_imgSE)
-           except:pass
-           fargs_rc=[nx0,ny0]
-           self.rc_thread=threading.Thread(target=self.draw_canvas,args=fargs_rc)
-           self.rc_thread.start()
-           return
+            # zoom only inside image area
+            return
+        scale = 1.0
+        # Respond to Linux (event.num) or Windows (event.delta) wheel event
+        if event.num == 5 or event.delta == -120:  # scroll down
+            i = min(self.width, self.height)
+            if int(i * self.imscale) < 30:
+                # image is less than 30 pixels
+                return
+            self.imscale /= self.delta
+            scale        /= self.delta
+        if event.num == 4 or event.delta == 120:  # scroll up
+            i = min(self.canvas.winfo_width(), self.canvas.winfo_height())
+            if i < self.imscale:
+                # 1 pixel is bigger than the visible area
+                return
+            self.imscale *= self.delta
+            scale        *= self.delta
+        self.canvas.scale('all', x, y, scale, scale)
+        self.show_image()
 
-    def draw_canvas(self,nx0,ny0):
-           fileprefix=os.path.join(FNAMES.Utils_dir,"Earth","Earth2_ZL"+str(self.earthzl)+"_")
-           filepreviewNW=fileprefix+str(nx0)+'_'+str(ny0)+".jpg"
-           try:
-               self.imageNW=Image.open(filepreviewNW)
-               self.photoNW=ImageTk.PhotoImage(self.imageNW)
-               self.canv_imgNW=self.canvas.create_image(nx0*2**self.earthzl*256/8,ny0*2**self.earthzl*256/8,anchor=NW,image=self.photoNW)
-               self.canvas.tag_lower(self.canv_imgNW)
-           except:
-               UI.lvprint(0,"Could not find Earth preview file",filepreviewNW,", please update your installation from a fresh copy.")
-               return
-           if nx0<2**(self.earthzl-3)-1:
-              filepreviewNE=fileprefix+str(nx0+1)+'_'+str(ny0)+".jpg"
-              self.imageNE=Image.open(filepreviewNE)
-              self.photoNE=ImageTk.PhotoImage(self.imageNE)
-              self.canv_imgNE=self.canvas.create_image((nx0+1)*2**self.earthzl*256/8,ny0*2**self.earthzl*256/8,anchor=NW,image=self.photoNE)
-              self.canvas.tag_lower(self.canv_imgNE)
-           if ny0<2**(self.earthzl-3)-1:
-              filepreviewSW=fileprefix+str(nx0)+'_'+str(ny0+1)+".jpg"
-              self.imageSW=Image.open(filepreviewSW)
-              self.photoSW=ImageTk.PhotoImage(self.imageSW)
-              self.canv_imgSW=self.canvas.create_image(nx0*2**self.earthzl*256/8,(ny0+1)*2**self.earthzl*256/8,anchor=NW,image=self.photoSW)
-              self.canvas.tag_lower(self.canv_imgSW)
-           if nx0<2**(self.earthzl-3)-1 and ny0<2**(self.earthzl-3)-1:
-              filepreviewSE=fileprefix+str(nx0+1)+'_'+str(ny0+1)+".jpg"
-              self.imageSE=Image.open(filepreviewSE)
-              self.photoSE=ImageTk.PhotoImage(self.imageSE)
-              self.canv_imgSE=self.canvas.create_image((nx0+1)*2**self.earthzl*256/8,(ny0+1)*2**self.earthzl*256/8,anchor=NW,image=self.photoSE)
-              self.canvas.tag_lower(self.canv_imgSE)
-           return
+    def show_image(self, event=None):
+        ''' Show image on the Canvas '''
+        bbox1 = self.canvas.bbox(self.container)
+        # Remove 1 pixel shift at the sides of the bbox1
+        bbox1 = (bbox1[0] + 1, bbox1[1] + 1, bbox1[2] - 1, bbox1[3] - 1)
+        bbox2 = (self.canvas.canvasx(0),
+                 self.canvas.canvasy(0),
+                 self.canvas.canvasx(self.canvas.winfo_width()),
+                 self.canvas.canvasy(self.canvas.winfo_height()))
+        # Scroll region box
+        bbox = [min(bbox1[0], bbox2[0]), min(bbox1[1], bbox2[1]),
+                max(bbox1[2], bbox2[2]), max(bbox1[3], bbox2[3])]
+        if bbox[0] == bbox2[0] and bbox[2] == bbox2[2]:
+            # whole image in the visible area
+            bbox[0] = bbox1[0]
+            bbox[2] = bbox1[2]
+        if bbox[1] == bbox2[1] and bbox[3] == bbox2[3]:
+            # whole image in the visible area
+            bbox[1] = bbox1[1]
+            bbox[3] = bbox1[3]
+        self.canvas.configure(scrollregion=bbox)
+        # get coordinates (x1,y1,x2,y2) of the image tile
+        x1 = max(bbox2[0] - bbox1[0], 0)
+        y1 = max(bbox2[1] - bbox1[1], 0)
+        x2 = min(bbox2[2], bbox1[2]) - bbox1[0]
+        y2 = min(bbox2[3], bbox1[3]) - bbox1[1]
+        if int(x2 - x1) > 0 and int(y2 - y1) > 0:
+            # show image if it in the visible area
+            x = min(int(x2 / self.imscale), self.width)
+            y = min(int(y2 / self.imscale), self.height)
+            image = self.image.crop((int(x1 / self.imscale), int(y1 / self.imscale), x, y))
+            imagetk = ImageTk.PhotoImage(image.resize((int(x2 - x1), int(y2 - y1))))
+            imageid = self.canvas.create_image(max(bbox2[0], bbox1[0]), max(bbox2[1], bbox1[1]), anchor='nw', image=imagetk)
+            self.canvas.lower(imageid)  # set image into background
+            self.canvas.imagetk = imagetk  # keep an extra reference to prevent garbage-collection
 
     def exit(self):
         self.destroy()
