@@ -1141,6 +1141,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
         self.image=Image.open(filepreview)
         self.width, self.height = self.image.size
         self.imscale = 1.0  # scale for the canvas image
+        self.fontsize = '12' # Adapted font size
         self.delta = 1.2  # zoom magnitude
         # Put image into container rectangle and use it to set proper coordinates to the image
         self.container = self.canvas.create_rectangle(0, 0, self.width, self.height, width=0)
@@ -1184,8 +1185,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                         continue
                     # With the enlarged acceptance rule for directory name there might be more than one tile for the same (lat,lon), we skip all but the first encountered.
                     if (lat,lon) in self.dico_tiles_done: continue
-                    [x0,y0]=GEO.wgs84_to_pix(lat+1,lon,self.earthzl)
-                    [x1,y1]=GEO.wgs84_to_pix(lat,lon+1,self.earthzl)
+                    (x0,y0,x1,y1) = self.map_box(lat,lon)
                     if os.path.isfile(os.path.join(self.working_dir,dir_name,"Earth nav data",FNAMES.long_latlon(lat,lon)+'.dsf')):
                         color='blue'
                         content=''
@@ -1217,7 +1217,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                             content='?'
                         self.dico_tiles_done[(lat,lon)]=(\
                                 self.canvas.create_rectangle(x0,y0,x1,y1,fill=color,stipple='gray12') if not OsX else self.canvas.create_rectangle(x0,y0,x1,y1,outline='black'),\
-                                self.canvas.create_text((x0+x1)//2,(y0+y1)//2,justify=CENTER,text=content,fill='black',font=('Helvetica','12','normal')),\
+                                self.canvas.create_text((x0+x1)//2,(y0+y1)//2,justify=CENTER,text=content,fill='black',font=('Helvetica',self.fontsize,'normal')),\
                                 dir_name\
                                 )
                         link=os.path.join(CFG.OVL.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+FNAMES.short_latlon(lat,lon))
@@ -1226,7 +1226,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                                 if not OsX:
                                     self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][0],stipple='gray50')
                                 else:
-                                    self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica','12','bold underline'))
+                                    self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica',self.fontsize,'bold underline'))
         elif self.grouped and os.path.isdir(os.path.join(self.working_dir,'Earth nav data')):
             for dir_name in os.listdir(os.path.join(self.working_dir,'Earth nav data')):
                 for file_name in os.listdir(os.path.join(self.working_dir,'Earth nav data',dir_name)):
@@ -1263,7 +1263,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                         content='?'
                     self.dico_tiles_done[(lat,lon)]=(\
                                 self.canvas.create_rectangle(x0,y0,x1,y1,fill=color,stipple='gray12') if not OsX else self.canvas.create_rectangle(x0,y0,x1,y1,outline='black'),\
-                                self.canvas.create_text((x0+x1)//2,(y0+y1)//2,justify=CENTER,text=content,fill='black',font=('Helvetica','12','normal')),\
+                                self.canvas.create_text((x0+x1)//2,(y0+y1)//2,justify=CENTER,text=content,fill='black',font=('Helvetica',self.fontsize,'normal')),\
                                 dir_name\
                                 )
 
@@ -1274,7 +1274,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                         if 'dar' not in sys.platform:
                             self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][0],stipple='gray50')
                         else:
-                            self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica','12','bold underline'))
+                            self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica',self.fontsize,'bold underline'))
         for (lat,lon) in self.dico_tiles_todo:
             [x0,y0]=GEO.wgs84_to_pix(lat+1,lon,self.earthzl)
             [x1,y1]=GEO.wgs84_to_pix(lat,lon+1,self.earthzl)
@@ -1363,7 +1363,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                 if not OsX:
                     self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][0],stipple='gray12')
                 else:
-                    self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica','12','normal'))
+                    self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica',self.fontsize,'normal'))
                 return
         elif self.grouped:
             link=os.path.join(CFG.OVL.xplane_install_dir,'Custom Scenery','zOrtho4XP_'+os.path.basename(self.working_dir))
@@ -1374,7 +1374,7 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                     if not OsX:
                         self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][0],stipple='gray12')
                     else:
-                        self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica','12','normal'))
+                        self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica',self.fontsize,'normal'))
                 return
         # in case this was a broken link
         try: os.remove(link)
@@ -1387,13 +1387,13 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
             if not OsX:
                 self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][0],stipple='gray50')
             else:
-                self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica','12','bold underline'))
+                self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica',self.fontsize,'bold underline'))
         else:
             for (lat0,lon0) in self.dico_tiles_done:
                 if not OsX:
                     self.canvas.itemconfig(self.dico_tiles_done[(lat0,lon0)][0],stipple='gray50')
                 else:
-                    self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica','12','bold underline'))
+                    self.canvas.itemconfig(self.dico_tiles_done[(lat,lon)][1],font=('Helvetica',self.fontsize,'bold underline'))
         return
 
     def add_tile(self,event):
@@ -1459,6 +1459,10 @@ class Ortho4XP_Earth_Preview(tk.Toplevel):
                 return
             self.imscale *= self.delta
             scale        *= self.delta
+        self.fontsize = str(int(12 * self.imscale))
+        for text in self.dico_tiles_done.values():
+            current_font = self.canvas.itemcget(text[1],'font').split(" ", 2)
+            self.canvas.itemconfig(text[1],font=(current_font[0],self.fontsize,current_font[2].strip('{}')))
         self.canvas.scale('all', x, y, scale, scale)
         self.show_image()
 
