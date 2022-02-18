@@ -168,7 +168,7 @@ def del_overlay(lat,lon):
 ##############################################################################
 def add_transparent_roads(lat, lon):
     # Check and create Library
-    enabled_groups = ["GRPLocal", "GRPLocalOneWay", "GRPPrimary", "GRPPrimaryOneWay", "GRPSecondary", "GRPSecondaryOneWa", "GRPSingleLane", "GRPSingleLaneOneway", "GRP_PlugsPri", "GRP_PlugsSec", "GRP_PlugsLoc", "GRP_PlugsRural", "GRP_JuncComp_EU", "GRP_JuncPlugs_EU", "GRPCompJunctionsDrp", "GRP_TransitionBYTs", "GRP_Centers", "GRP_Corners", "GRP_Stubs", "GRP_DeadEnds", "GRP_Approaches"]
+    enabled_groups = ["GRPLocal", "GRPLocalOneWay", "GRPPrimary", "GRPPrimaryOneWay", "GRPSecondary", "GRPSecondaryOneWa", "GRPSingleLane", "GRPSingleLaneOneway", "GRP_PlugsPri", "GRP_PlugsSec", "GRP_PlugsLoc", "GRP_PlugsRural", "GRP_JuncComp_EU", "GRP_JuncPlugs_EU", "GRPCompJunctionsDrp", "GRP_TransitionBYTs", "GRP_Centers", "GRP_Corners", "GRP_Stubs", "GRP_DeadEnds", "GRP_Approaches", "GRP2_low_shear", "GRP5_high_shear", "GRP_basic_plugs"]
     roads_library = os.path.join(FNAMES.Overlay_dir, "Resources/1000_roads")
     if not os.path.exists(roads_library):
         UI.vprint(1,"-> Creating transparent roads library")
@@ -188,7 +188,7 @@ def add_transparent_roads(lat, lon):
                 if matcher:
                     uncomment_enabled_block = matcher.group(2) in enabled_groups
                 if uncomment_enabled_block:
-                    line = re.sub(r'^(QUAD|TRI|SEGMENT_DRAPED)', r'#(Transparency) \1', line)
+                    line = re.sub(r'(QUAD|TRI|SEGMENT_DRAPED)', r'#(Transparency) \1', line)
                 new_file_content += line
 
             with open(os.path.join(roads_library, ft), "w", encoding="utf-8") as output_file:
