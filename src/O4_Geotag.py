@@ -1,4 +1,5 @@
 import os
+from osgeo import gdal
 from pyproj import Transformer
 from math import pi, exp, atan
 
@@ -23,5 +24,5 @@ for f in os.listdir():
     (latmin,lonmax)=gtile_to_wgs84(til_x_left+16,til_y_top+16,zoomlevel)
     (xmin,ymin)=transformer.transform(lonmin,latmin)
     (xmax,ymax)=transformer.transform(lonmax,latmax)
-    os.system("gdal_translate -of Gtiff -co COMPRESS=JPEG -a_ullr "+str(xmin)+" "+str(ymax)+" "+str(xmax)+" "+str(ymin)+" -a_srs epsg:3857 "+f+" "+f.replace(".jpg","_tmp.tif"))
-    os.system("gdalwarp -of Gtiff -co COMPRESS=JPEG -s_srs epsg:3857 -t_srs epsg:4326 -ts 4096 4096 -rb "+f.replace(".jpg","_tmp.tif")+" "+f.replace(".jpg",".tif"))
+    gdal.Translate(f.replace(".jpg","_tmp.tif"), f, format="GTiff", creationOptions=["COMPRESS=JPEG"], outputBounds=[xmin, ymax, xmax, ymin], outputSRS="epsg:3857")
+    gdal.Warp(f.replace(".jpg",".tif"), f.replace(".jpg","_tmp.tif"), format="GTiff", creationOptions=["COMPRESS=JPEG"], srcSRS="epsg:3857", dstSRS="epsg:4326", width=4096, height=4096, resampleAlg=gdal.GRA_Bilinear)
